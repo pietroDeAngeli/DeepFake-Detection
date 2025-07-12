@@ -75,22 +75,24 @@ def make_square_box(x, y, w, h, img_w, img_h):
 
     return int(new_x), int(new_y), int(side), int(side)
 
-def face_video_extractor(video, detector=None):
+def face_video_extractor(video, detector=None, return_faces=False):
     """
     Extracts and crops the largest face from each frame of a video.
 
     For each frame in the video:
     - Converts the frame to RGB
-    - Detects faces using the provided detector (e.g., MTCNN)
+    - Detects faces using the provided detector (MTCNN)
     - If at least one face is detected, selects the largest one
     - Applies padding to make the bounding box square
     - Crops and resizes the face to 224x224 pixels
     - Appends the processed face frame to the final list
 
     Parameters:
-        video (str): Path to the video file (e.g., .mp4).
+        video (str): Path to the video file (.mp4).
         detector (object): A face detector instance with a `detect_faces(img)` method 
-                           (e.g., MTCNN). Must be initialized before use.
+                           (MTCNN). Must be initialized before use.
+        return_faces (bool): If True, returns the cropped face images; 
+                             if False, returns the bounding box coordinates.
 
     Returns:
         list of np.ndarray: A list of cropped and resized face frames 
@@ -117,16 +119,22 @@ def face_video_extractor(video, detector=None):
         # If a face is detected, draw a bounding box
         if face is not None:
             x, y, width, height = face['box']
-            img_h, img_w, _ = frame_rgb.shape
-            
-            # Make the bounding box square
-            squared_image = make_square_box(x, y, width, height, img_w, img_h)
-            x, y, width, height = squared_image
 
-            face_crop = frame_rgb[y:y+height, x:x+width]
-            face_resized = cv2.resize(face_crop, (224, 224))
+            if not return_faces:
+                # Return just the shape
+                video_faces.append({"x": x, "y": y, "width": width, "height": height})
+            else:
+                # Return the cropped face
+                img_h, img_w, _ = frame_rgb.shape
+                
+                # Make the bounding box square
+                squared_image = make_square_box(x, y, width, height, img_w, img_h)
+                x, y, width, height = squared_image
 
-            video_faces.append(face_resized)
+                face_crop = frame_rgb[y:y+height, x:x+width]
+                face_resized = cv2.resize(face_crop, (224, 224))
+
+                video_faces.append(face_resized)
     
     cap.release()
 
