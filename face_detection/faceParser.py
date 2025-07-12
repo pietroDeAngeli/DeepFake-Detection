@@ -1,6 +1,3 @@
-# Face Recognition and Detection using MTCNN
-from mtcnn import MTCNN
-
 # Tools
 import os
 import tdqm as tqdm
@@ -8,9 +5,8 @@ import tdqm as tqdm
 # Custom Libraries
 import face_detection_tools as tools
 
-
 # Get all the videos
-def get_videos(path):
+def get_dir_videos(path):
     """
     Retrieve all .mp4 video file paths from a given directory.
 
@@ -45,6 +41,8 @@ def faces_detection(videos):
         the extracted face frames (as NumPy arrays) for one video.
     """
     faces = []
+    detector = tools.initialize_detector()
+
     for video in tqdm(videos, desc="Extracting faces"):
 
         video_faces = tools.face_video_extractor(video, detector)
@@ -53,16 +51,8 @@ def faces_detection(videos):
     return faces
 
 
-# Create a detector instance
-detector = MTCNN(device="cpu")
+#fake_videos = get_dir_videos(videos_path)
+#real_videos = get_dir_videos(videos_path)
 
-videos_path = "../FF++/"
-
-fake_videos = get_videos(os.path.join(videos_path, "fake"))
-real_videos = get_videos(os.path.join(videos_path, "real"))
-
-fake_faces = faces_detection(fake_videos)
-real_faces = faces_detection(real_videos)
-
-fake_faces, real_faces
-
+#fake_faces = faces_detection(fake_videos)
+#real_faces = faces_detection(real_videos)

@@ -10,6 +10,16 @@ from PIL import Image
 import numpy as np
 import os
 
+def initialize_detector():
+    """
+    Initializes the MTCNN face detector.
+
+    Returns:
+        MTCNN: An instance of the MTCNN face detector.
+    """
+    detector = MTCNN(device="cpu")
+    return detector
+
 # Function to get the biggest face
 def get_bigger_face(results):
     """
