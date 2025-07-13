@@ -10,6 +10,16 @@ from PIL import Image
 import numpy as np
 import os
 
+class FaceBox:
+    def __init__(self, x,y,side):
+        self.x = x
+        self.y = y
+        self.side = side
+
+class Face:
+    def __init__(self, image: cv2.typing.MatLike, box: FaceBox):
+        self.image = image
+
 def initialize_detector():
     """
     Initializes the MTCNN face detector.
@@ -21,7 +31,7 @@ def initialize_detector():
     return detector
 
 # Function to get the biggest face
-def get_bigger_face(results):
+def get_bigger_face(faces):
     """
     Convert a rectangular bounding box to a square box centered on the original.
 
@@ -36,12 +46,12 @@ def get_bigger_face(results):
         img_h (int): Height of the full image.
 
     Returns:
-        tuple: Coordinates (new_x, new_y, side, side) of the square box.
+        tuple: Coordinates (new_x, new_y, side, side) of the square box. None if no face is detected.
     """
     bigger_face = None
-    for face in results:
+    for face in faces:
         # Get the bounding box coordinates
-        x, y, width, height = face['box']
+        _, _, width, height = face['box']
         
         # take the bigger one
         if bigger_face is None or (width * height) > (bigger_face['box'][2] * bigger_face['box'][3]):
@@ -52,13 +62,17 @@ def get_bigger_face(results):
 # Reshape the box to a square
 def make_square_box(x, y, w, h, img_w, img_h):
     """
-    Retrieve all .mp4 video file paths from a given directory.
-
+    Reshape a rectangular bounding box to a square box centered on the original.
+    Ensures the new square box stays within the image boundaries.
     Parameters:
-        path (str): Path to the directory containing video files.
-
+        x (int): X coordinate of the top-left corner of the original box.
+        y (int): Y coordinate of the top-left corner of the original box.
+        w (int): Width of the original box.
+        h (int): Height of the original box.
+        img_w (int): Width of the full image.
+        img_h (int): Height of the full image.
     Returns:
-        list of str: List of full paths to .mp4 video files.
+        tuple: Coordinates (new_x, new_y, side) of the square box.
     """
     cx = x + w // 2
     cy = y + h // 2
@@ -73,9 +87,9 @@ def make_square_box(x, y, w, h, img_w, img_h):
     if new_y + side > img_h:
         new_y = img_h - side
 
-    return int(new_x), int(new_y), int(side), int(side)
+    return int(new_x), int(new_y), int(side)
 
-def face_video_extractor(video, detector=None, return_faces=False):
+def face_video_extractor(video, detector=None):
     """
     Extracts and crops the largest face from each frame of a video.
 
@@ -91,11 +105,9 @@ def face_video_extractor(video, detector=None, return_faces=False):
         video (str): Path to the video file (.mp4).
         detector (object): A face detector instance with a `detect_faces(img)` method 
                            (MTCNN). Must be initialized before use.
-        return_faces (bool): If True, returns the cropped face images; 
-                             if False, returns the bounding box coordinates.
 
     Returns:
-        list of np.ndarray: A list of cropped and resized face frames 
+        list of Face: A list of cropped and resized face frames 
                             (one per frame where a face is detected).
     """
     video_faces = []
@@ -111,30 +123,28 @@ def face_video_extractor(video, detector=None, return_faces=False):
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
         # Detect faces in the frame
-        results = detector.detect_faces(frame_rgb)
+        faces = detector.detect_faces(frame_rgb)
         
         # Get bigger face
-        face = get_bigger_face(results)
+        face = get_bigger_face(faces)
         
         # If a face is detected, draw a bounding box
         if face is not None:
             x, y, width, height = face['box']
 
-            if not return_faces:
-                # Return just the shape
-                video_faces.append({"x": x, "y": y, "width": width, "height": height})
-            else:
-                # Return the cropped face
-                img_h, img_w, _ = frame_rgb.shape
-                
-                # Make the bounding box square
-                squared_image = make_square_box(x, y, width, height, img_w, img_h)
-                x, y, width, height = squared_image
+            # Return the cropped face
+            img_h, img_w, _ = frame_rgb.shape
+            
+            # Make the bounding box square
+            x, y, side = make_square_box(x, y, width, height, img_w, img_h)
+            face_box = FaceBox(x, y, side)
 
-                face_crop = frame_rgb[y:y+height, x:x+width]
-                face_resized = cv2.resize(face_crop, (224, 224))
-
-                video_faces.append(face_resized)
+            face_crop = frame_rgb[y:y+height, x:x+width]
+            face_image = cv2.resize(face_crop, (224, 224))
+            
+            video_faces.append(Face(face_image, face_box))
+        else:
+            video_faces.append(None)
     
     cap.release()
 

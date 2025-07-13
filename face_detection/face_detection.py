@@ -19,8 +19,8 @@ def faces_detection(videos):
         videos (list of str): List of paths to video files.
 
     Returns:
-        list of list of np.ndarray: A nested list where each sublist contains 
-        the extracted face frames (as NumPy arrays) for one video.
+        list of list of Face: A nested list where each sublist contains 
+        the extracted face frames (as Face objects) for one video.
     """
     faces = []
     detector = tools.initialize_detector()
