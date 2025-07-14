@@ -1,19 +1,15 @@
 # Tools
-import tdqm as tqdm
+from tqdm import tqdm
 
 # Custom Libraries
-import face_detection_tools as tools
+import face_detection.face_detection_tools as tools
 
 # Function to perform face detection on a list of videos
+
 def faces_detection(videos):
     """
-    Applies face extraction on a list of videos.
-
-    For each video in the list:
-    - Processes all frames to detect and crop the largest face per frame
-    - Uses a face detector (e.g., MTCNN) to find faces
-    - Resizes each cropped face to 224x224 pixels
-    - Stores the resulting face sequences for each video
+    For each video in the provided list, this function extracts faces
+    and returns a list of lists containing the detected faces.
 
     Parameters:
         videos (list of str): List of paths to video files.

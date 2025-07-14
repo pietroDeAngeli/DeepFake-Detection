@@ -1,0 +1,16 @@
+notebook
+
+# Face detection
+mtcnn
+tensorflow
+
+# Open CV
+opencv-python
+
+# Tools
+matplotlib
+seaborn
+tdqm
+
+# Motion vectors
+av

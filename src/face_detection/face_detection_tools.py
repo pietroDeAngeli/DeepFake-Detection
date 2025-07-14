@@ -1,14 +1,13 @@
 # Face Recognition and Detection using MTCNN
 from mtcnn import MTCNN
-from mtcnn.utils.images import load_image
 
 # OpenCV
 import cv2
 
 # Tools
-from PIL import Image
-import numpy as np
-import os
+#from PIL import Image
+#import numpy as np
+#import os
 
 class FaceBox:
     def __init__(self, x,y,side):
@@ -19,6 +18,7 @@ class FaceBox:
 class Face:
     def __init__(self, image: cv2.typing.MatLike, box: FaceBox):
         self.image = image
+        self.box = box
 
 def initialize_detector():
     """
@@ -139,7 +139,7 @@ def face_video_extractor(video, detector=None):
             x, y, side = make_square_box(x, y, width, height, img_w, img_h)
             face_box = FaceBox(x, y, side)
 
-            face_crop = frame_rgb[y:y+height, x:x+width]
+            face_crop = frame_rgb[y:y+side, x:x+side]
             face_image = cv2.resize(face_crop, (224, 224))
             
             video_faces.append(Face(face_image, face_box))
@@ -147,5 +147,6 @@ def face_video_extractor(video, detector=None):
             video_faces.append(None)
     
     cap.release()
+    
 
     return video_faces

@@ -1,0 +1,7 @@
+av==15.0.0
+matplotlib
+seaborn
+tqdm
+opencv-python
+mtcnn
+tensorflow

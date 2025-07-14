@@ -2,7 +2,7 @@ import av
 from av.sidedata.sidedata import Type
 
 # Custom 
-from ..face_detection.face_detection_tools import FaceBox
+from face_detection.face_detection_tools import FaceBox
 
 class MotionVector:
     def __init__(self, source, w, h, src_x, src_y, dst_x, dst_y, motion_x, motion_y, motion_scale):
@@ -60,21 +60,23 @@ def extract_motion_vectors(video_path, faces):
             mv_data = frame.side_data.get(Type.MOTION_VECTORS)
             if mv_data:
                 for mv in mv_data:
+
                     vector = MotionVector(
-                        source=mv.source,
-                        w=mv.w,
-                        h=mv.h,
-                        src_x=mv.src_x,
-                        src_y=mv.src_y,
-                        dst_x=mv.dst_x,
-                        dst_y=mv.dst_y,
-                        motion_x=mv.motion_x,
-                        motion_y=mv.motion_y,
-                        motion_scale=mv.motion_scale
-                    )
+                            source=mv.source,
+                            w=mv.w,
+                            h=mv.h,
+                            src_x=mv.src_x,
+                            src_y=mv.src_y,
+                            dst_x=mv.dst_x,
+                            dst_y=mv.dst_y,
+                            motion_x=mv.motion_x,
+                            motion_y=mv.motion_y,
+                            motion_scale=mv.motion_scale
+                        )
 
                     # Check if the vector is within the bounds of the corresponding face
                     if vector.is_in_face(faces[n_frame]):
+                            
                         vectors.append(vector)
             
             all_flows.append({"time": ts, "motion_vectors": vectors})
