@@ -15,6 +15,8 @@ FF++/
 
 🔹 2. Face detection
 
+https://github.com/opencv/opencv_zoo/blob/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+
 Per ogni frame, estrai la faccia (MTCNN) più grande
 
 Ritaglia e resize a 224×224 px

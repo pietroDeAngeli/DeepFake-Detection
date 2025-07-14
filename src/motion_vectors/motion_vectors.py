@@ -30,16 +30,18 @@ class MotionVector:
         return face.x <= self.src_x < face.x + face.side and face.y <= self.src_y < face.y + face.side
 
 
-def extract_motion_vectors(video_path, faces):
+def extract_motion_vectors(video_path, faces) -> list[list[MotionVector] | None]:
     """
     Extract motion vectors of the faces from a video file and return them as a list of dictionaries.
-    
+
     Parameters:
         video_path (str): Path to the video file.
         faces (list of Face): List of face frames extracted from the video.
+
     Returns:
-        list of dict: A list where each dictionary contains motion vectors for a corresponding face frame.
+        list of dict: A list where each element corresponds to a frame in the video.
     """
+
     # Open the video container and get the video stream
     container = av.open(video_path)
     stream = container.streams.video[0]
@@ -57,8 +59,11 @@ def extract_motion_vectors(video_path, faces):
             vectors = []
             ts = float(frame.pts * frame.time_base) if frame.pts is not None else 0.0
 
+            # Get motion vectors from the frame's side data
             mv_data = frame.side_data.get(Type.MOTION_VECTORS)
-            if mv_data:
+
+            # if there are motion vectors and the frame has a corresponding face
+            if mv_data and faces[n_frame] is not None:
                 for mv in mv_data:
 
                     vector = MotionVector(
@@ -76,10 +81,11 @@ def extract_motion_vectors(video_path, faces):
 
                     # Check if the vector is within the bounds of the corresponding face
                     if vector.is_in_face(faces[n_frame]):
-                            
                         vectors.append(vector)
+            else:
+                vectors.append(None)
             
-            all_flows.append({"time": ts, "motion_vectors": vectors})
+            all_flows.append(vectors)
             n_frame += 1
 
     return all_flows

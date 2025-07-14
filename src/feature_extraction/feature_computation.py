@@ -6,67 +6,74 @@ def compute_features_frame(mv: list):
     Extracts statistical motion vector features from a single frame.
     
     Args:
-        mv (list[MotionVector]): List of motion vectors for a single frame.
-    
+        mv (list[MotionVector] | None): List of motion vectors for 
+            the frame, or None if no motion vectors are available.
     Returns:
-        dict: Dictionary containing frame-level motion features.
+        dict: Dictionary with motion vector features:
     """
+    # I-frame or no motion vectors
+    defaults = {
+        "mean_dx": 0.0,
+        "mean_dy": 0.0,
+        "var_dx": 0.0,
+        "var_dy": 0.0,
+        "mean_magnitude": 0.0,
+        "zero_mv_percent": 1.0,
+        "direction_entropy": 0.0,
+        "motion_density": 0.0
+    }
+
+    # No MV
+    if mv is None or len(mv) == 0:
+        return defaults
+
+    # Remove None values
+    filtered = [v for v in mv if v is not None]
+    if not filtered:
+        return defaults
+
     dx_list = []
     dy_list = []
     magnitude_list = []
-    angle_bins = [0] * 8  # 8 directional bins (45° each)
+    angle_bins = [0] * 8  # 8 directions for angles
     non_zero_count = 0
+    n = len(filtered)
 
-    for v in mv:
-        if v.motion_scale == 0:
-            continue  # avoid division by zero
+    for v in filtered:
+        # avoid division by zero
 
         dx = v.motion_x / v.motion_scale
         dy = v.motion_y / v.motion_scale
-
         dx_list.append(dx)
         dy_list.append(dy)
-        magnitude_list.append(math.sqrt(dx**2 + dy**2))
+        magnitude_list.append(math.hypot(dx, dy))
 
+        # count non-zero vectors and calculate angle
         if dx != 0 or dy != 0:
             non_zero_count += 1
             angle = math.atan2(dy, dx)
             bin_index = int(((angle + math.pi) / (2 * math.pi)) * 8) % 8
             angle_bins[bin_index] += 1
 
-    n = len(mv)
-    if n == 0:
-        # Return zeros if no valid motion vectors
-        return {
-            "mean_dx": 0.0,
-            "mean_dy": 0.0,
-            "var_dx": 0.0,
-            "var_dy": 0.0,
-            "mean_magnitude": 0.0,
-            "zero_mv_percent": 1.0,
-            "direction_entropy": 0.0,
-            "motion_density": 0.0
-        }
+    # array numpy
+    dx_arr = np.array(dx_list)
+    dy_arr = np.array(dy_list)
+    mag_arr = np.array(magnitude_list)
 
-    dx_array = np.array(dx_list)
-    dy_array = np.array(dy_list)
-    magnitude_array = np.array(magnitude_list)
+    mean_dx       = float(np.mean(dx_arr)) if dx_arr.size       > 0 else 0.0
+    mean_dy       = float(np.mean(dy_arr)) if dy_arr.size       > 0 else 0.0
+    var_dx        = float(np.var(dx_arr))  if dx_arr.size       > 0 else 0.0
+    var_dy        = float(np.var(dy_arr))  if dy_arr.size       > 0 else 0.0
+    mean_magnitude= float(np.mean(mag_arr))if mag_arr.size      > 0 else 0.0
+    zero_mv_percent = 1.0 - (non_zero_count / n)
+    motion_density  = non_zero_count / n
 
-    mean_dx = np.mean(dx_array) if dx_array.size > 0 else 0.0
-    mean_dy = np.mean(dy_array) if dy_array.size > 0 else 0.0
-    var_dx = np.var(dx_array) if dx_array.size > 0 else 0.0
-    var_dy = np.var(dy_array) if dy_array.size > 0 else 0.0
-    mean_magnitude = np.mean(magnitude_array) if magnitude_array.size > 0 else 0.0
-    zero_mv_percent = 1 - (non_zero_count / n)
-
-    # Direction entropy (in bits)
+    # Angular entropy
     total_bins = sum(angle_bins)
     direction_entropy = 0.0
     if total_bins > 0:
-        probs = [count / total_bins for count in angle_bins if count > 0]
+        probs = [c / total_bins for c in angle_bins if c > 0]
         direction_entropy = -sum(p * math.log2(p) for p in probs)
-
-    motion_density = non_zero_count / n
 
     return {
         "mean_dx": mean_dx,
@@ -79,44 +86,28 @@ def compute_features_frame(mv: list):
         "motion_density": motion_density
     }
 
-def compute_features_video(video_mv: list[list]):
+
+def compute_features_video(video_mv: list):
     """
-    Computes average motion features for a video by aggregating frame-level features.
+    Computes average motion features for a video aggregando i frame-level features.
     
     Args:
-        video_mv (list[list[MotionVector]]): A list of frames, each containing a list of motion vectors.
+        video_mv (list[list[MotionVector]]): Frame-level motion vectors for the video.
     
     Returns:
-        dict: Dictionary containing average video-level motion features.
+        dict: Dictionary with average motion features for the video.
     """
-    frame_features = []
+    # feature evaluation for each frame
+    video_features = [compute_features_frame(fm) for fm in video_mv]
 
-    for frame_mv in video_mv:
-        frame_feat = compute_features_frame(frame_mv)
-        frame_features.append(frame_feat)
+    # se non ci sono frame restituisco default
+    if not video_features:
+        return compute_features_frame(None)
 
-    if not frame_features:
-        return {
-            "mean_dx": 0.0,
-            "mean_dy": 0.0,
-            "var_dx": 0.0,
-            "var_dy": 0.0,
-            "mean_magnitude": 0.0,
-            "zero_mv_percent": 1.0,
-            "direction_entropy": 0.0,
-            "motion_density": 0.0
-        }
-
-    # Aggregate by averaging each key
-    keys = frame_features[0].keys()
+    # average on frame-level features
     mean_features = {
-        key: np.mean([f[key] for f in frame_features]) for key in keys
+        key: float(np.mean([f[key] for f in video_features]))
+        for key in video_features[0].keys()
     }
 
     return mean_features
-
-
-
-    
-    
-

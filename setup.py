@@ -17,6 +17,7 @@ setup(
         "opencv-python",
         "mtcnn",
         "tensorflow",
+        "opencv-python-headless>=4.5.5"
     ],
     python_requires=">=3.10",                    # Versione minima di Python
 )

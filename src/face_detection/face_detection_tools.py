@@ -1,12 +1,12 @@
 # Face Recognition and Detection using MTCNN
-from mtcnn import MTCNN
+#from mtcnn import MTCNN
 
 # OpenCV
 import cv2
 
 # Tools
+import numpy as np
 #from PIL import Image
-#import numpy as np
 #import os
 
 class FaceBox:
@@ -27,37 +27,16 @@ def initialize_detector():
     Returns:
         MTCNN: An instance of the MTCNN face detector.
     """
-    detector = MTCNN(device="cpu")
+    #detector = MTCNN(device="cpu") # MTCNN model initialization
+
+    model_path = "src/face_detection/face_detection_yunet_2023mar.onnx" # yuNet model path
+    detector = cv2.FaceDetectorYN.create(
+        model=model_path,
+        config="",
+        input_size=(1920, 1080),
+    )
+
     return detector
-
-# Function to get the biggest face
-def get_bigger_face(faces):
-    """
-    Convert a rectangular bounding box to a square box centered on the original.
-
-    Ensures the new square box stays within the image boundaries.
-
-    Parameters:
-        x (int): X coordinate of the top-left corner of the original box.
-        y (int): Y coordinate of the top-left corner of the original box.
-        w (int): Width of the original box.
-        h (int): Height of the original box.
-        img_w (int): Width of the full image.
-        img_h (int): Height of the full image.
-
-    Returns:
-        tuple: Coordinates (new_x, new_y, side, side) of the square box. None if no face is detected.
-    """
-    bigger_face = None
-    for face in faces:
-        # Get the bounding box coordinates
-        _, _, width, height = face['box']
-        
-        # take the bigger one
-        if bigger_face is None or (width * height) > (bigger_face['box'][2] * bigger_face['box'][3]):
-            bigger_face = face
-
-    return bigger_face
 
 # Reshape the box to a square
 def make_square_box(x, y, w, h, img_w, img_h):
@@ -149,4 +128,70 @@ def face_video_extractor(video, detector=None):
     cap.release()
     
 
+    return video_faces
+
+def face_video_extractor_2(video: str, detector) -> list[Face | None]:
+    """
+    Extracts and crops the largest face from each frame of a video
+    using OpenCV’s FaceDetectorYN (YuNet).
+
+    For each frame:
+    1. Resize the detector input to the current frame size.
+    2. Convert the frame to RGB.
+    3. Run face detection with a preallocated output buffer.
+    4. Filter detections by confidence threshold.
+    5. Select the largest face by area.
+    6. Make its bounding box square and crop the face.
+    7. Resize the face crop to 224×224 and wrap it in a Face object.
+
+    Args:
+        video (str): Path to the video file.
+        detector: An initialized cv2.FaceDetectorYN instance.
+
+    Returns:
+        List[Face|None]: One Face per frame if detected, otherwise None.
+    """
+    video_faces = []
+    cap = cv2.VideoCapture(video)
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Configure detector for this frame resolution
+        h, w = frame.shape[:2]
+        detector.setInputSize((w, h))
+
+        # Perform face detection
+        num, faces_mat = detector.detect(frame)
+
+        # If faces are detected, find the largest one
+        biggest_face = None
+        if faces_mat is not None:
+            # Find the largest face
+            for det in faces_mat[:int(num)]:
+                x, y, w_box, h_box = map(int, det[:4])
+                
+                if biggest_face is None or w_box * h_box > biggest_face['box'][2] * biggest_face['box'][3]:
+                    biggest_face = {
+                        'box': (x, y, w_box, h_box),
+                    }
+
+        if biggest_face is not None:
+            x, y, width, height = biggest_face['box']
+
+            # Make bounding box square
+            new_x, new_y, side = make_square_box(x, y, width, height, w, h)
+            face_box = FaceBox(new_x, new_y, side)
+
+            # Crop and resize
+            crop = frame[new_y:new_y+side, new_x:new_x+side]
+            face_img = cv2.cvtColor(cv2.resize(crop, (224, 224)), cv2.COLOR_BGR2RGB)
+
+            video_faces.append(Face(face_img, face_box))
+        else:
+            video_faces.append(None)
+
+    cap.release()
     return video_faces
