@@ -5,3 +5,5 @@ tqdm
 opencv-python
 mtcnn
 tensorflow
+opencv-python-headless>=4.5.5
+torch

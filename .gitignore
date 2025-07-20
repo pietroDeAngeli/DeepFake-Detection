@@ -1,3 +1,8 @@
 *.zip
 F++/
 *.mp4
+*.jpg
+*.json
+**/__pycache__
+**/deepfake_tools.egg-info
+*.onnx
