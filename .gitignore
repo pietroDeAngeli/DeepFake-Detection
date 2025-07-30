@@ -5,4 +5,9 @@ F++/
 *.json
 **/__pycache__
 **/deepfake_tools.egg-info
+**/dataset
 *.onnx
+*.pth
+*.jpg
+
+

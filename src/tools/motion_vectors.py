@@ -69,7 +69,13 @@ def extract_motion_vectors_and_im(
         # 3) Grab motion-vectors in one call
         mv_data = frame.side_data.get(Type.MOTION_VECTORS)
         if mv_data is None:
-            raise RuntimeError("Motion Vectors are not available")
+            # Sometimes they could be labelled incorrectly
+            mvx = np.zeros((out_res, out_res), dtype=np.float32)
+            mvy = np.zeros((out_res, out_res), dtype=np.float32)
+            im  = np.zeros((out_res, out_res), dtype=np.uint8)
+            results.append((mvx, mvy, im))
+            print("Labelled incorrectly")
+            continue
         mv_list = mv_data  # iterable of dicts
 
         # 4) Prepare per-pixel face-crop maps so partial macroblocks keep correct size

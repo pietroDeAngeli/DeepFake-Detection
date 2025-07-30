@@ -132,10 +132,77 @@ def face_frame_extractor(
 
 def extract_frames_with_faces(detector: cv2.FaceDetectorYN,
                               video_path: str,
-                              n_frames: int = 100
+                              n_frames: int = 100,
+                              unique_frames = False
                               ) -> list[tuple[av.video.frame.VideoFrame, Face]] | None:
+    # Check if the file exists
     assert os.path.exists(video_path), f"Video file {video_path} does not exist"
 
+    if unique_frames:
+        return unique_frame_extractor(detector, video_path, n_frames)
+    else:
+        return random_frame_extractor(detector, video_path, n_frames)
+
+
+def random_frame_extractor(detector: cv2.FaceDetectorYN,
+                           video_path: str,
+                           n_frames: int,
+                           window_size: int = 8):
+    
+    container = av.open(video_path)
+    stream = container.streams.video[0]
+    stream.codec_context.options = {"flags2": "+export_mvs"}
+
+    duration = container.duration
+
+    randoms: list[tuple[av.video.frame.VideoFrame, Face]] = []
+    count = 0
+    attempts = 0
+
+    while count < n_frames and attempts < n_frames * 10:
+
+        attempts += 1
+
+        # Seek to the closest keyframe before a random timestamp
+        rand_ts = random.randint(0, duration)
+    
+        container.seek(rand_ts, any_frame=False, backward=True, stream=stream)
+
+        # Decode a window of frames after the keyframe and collect P/B frames
+        candidates: list[av.video.frame.VideoFrame] = []
+        for frame in container.decode(video=0):
+
+            candidates.append(frame)
+            
+            if len(candidates) >= window_size:
+                break
+
+        if not candidates:
+            continue
+
+        # Choose one P/B frame at random from the collected ones
+        frame = random.choice(candidates)
+
+        # Perform face detection on the selected frame
+        face = face_frame_extractor(detector, frame, conf_threshold=0.3)
+        if face is None:
+            continue
+
+        randoms.append((frame, face))
+        count += 1
+
+    if not randoms:
+        print(f"Warning: no faces found in {video_path}")
+        return None
+    
+    return randoms
+
+
+def unique_frame_extractor(detector: cv2.FaceDetectorYN,
+                              video_path: str,
+                              n_frames: int
+                              ):
+    
     container = av.open(video_path)
     stream = container.streams.video[0]
     stream.codec_context.options = {"flags2": "+export_mvs"}

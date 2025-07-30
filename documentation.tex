@@ -1,0 +1,152 @@
+\documentclass[a4paper,12pt]{article}
+
+% Useful packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{lmodern}
+\usepackage{xcolor}
+\usepackage{listingsutf8}
+\usepackage{float}
+
+% Title and Author
+\title{DeepFake Detection - Documentation}
+\author{Pietro De Angeli}
+
+\lstset{
+  breaklines=true,
+  basicstyle=\ttfamily,
+}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+This project, part of the “Signal, Image and Video Processing” course, implements the paper \emph{"Efficient Temporally-Aware DeepFake Detection using H.264 Motion Vectors"}. The goal is to distinguish between DeepFake and real videos using \textbf{motion vectors} (MVs), a lightweight alternative to optical flow.
+
+MVs can be extracted directly from the H.264 video encoding (if supported), without further computation. Only motion vectors inside face regions are used, which are detected using the pretrained \textbf{YuNet} face detector—a faster alternative to the MTCNN used in the original paper.
+
+The architecture consists of two identical MobileNetV3 networks, one processing RGB images and the other processing MV+IM tensors. Their outputs are then concatenated to produce a final binary classification.
+
+The paper criticizes traditional methods for only using per-frame predictions without considering temporal consistency. This solution leverages such temporal information by comparing how content moves across frames.
+
+Due to hardware limitations, only a subset of the FaceForensics++ dataset is used. While training is limited, inference is efficient—bottlenecked mostly by face detection.
+
+\section{Background}
+
+The paper uses MVs from H.264 as a low-cost approximation of optical flow (OF). Unlike OF, which operates at the pixel level, MVs describe how macroblocks (e.g., 16×16 pixels) move across frames. While less precise, MVs are significantly faster to obtain.
+
+\section{Project Structure}
+
+The project has the following directory structure:
+
+\begin{verbatim}
+|- dataset/
+   |- video_1/
+   |- ...
+   |- video_N/
+|- FF++/
+   |- real/
+   |- fake/
+|- models/
+|- src/
+   |- classifier/
+   |- tools/
+|- test/
+\end{verbatim}
+
+\subsection{\texttt{src}}
+
+Contains the implementation. In particular, the \texttt{tools} folder has:
+\begin{itemize}
+  \item \texttt{face\_detection.py}
+  \item \texttt{motion\_vectors.py}
+  \item \texttt{feature\_computation.py}
+  \item \texttt{tools.py}
+\end{itemize}
+
+\subsection{\texttt{models}}
+
+\begin{itemize}
+  \item \textbf{YuNet}: a pretrained face detector returning face bounding boxes and confidence scores.
+  \item \textbf{Classifier}: a MobileNetV3-based model that takes both RGB and MV+IM features and returns the prediction.
+\end{itemize}
+
+\section{Pipeline}
+
+\subsection{Face Detection}
+
+The paper suggests using MTCNN, but YuNet is used instead for efficiency. We define two classes:
+\begin{itemize}
+  \item \texttt{FaceBox}: holds a square bounding box (x, y, side).
+  \item \texttt{Face}: holds a bounding box and the corresponding 224×224 BGR face image.
+\end{itemize}
+
+The function \texttt{initialize\_detector()} returns the YuNet model. \texttt{face\_frame\_extractor()} returns the largest face found, if any, resizing the crop to 224×224 and centering a square box.
+
+Frame extraction is done via:
+\begin{itemize}
+  \item \texttt{random\_frame\_extractor()}: samples random timestamps, decoding a small window of frames and picking one.
+  \item \texttt{unique\_frame\_extractor()}: uses reservoir sampling for uniform sampling over the whole video.
+\end{itemize}
+
+The wrapper \texttt{extract\_frames\_with\_faces()} chooses between the two, depending on the \texttt{unique\_frames} flag. These functions return up to 100 tuples of (frame, face), opening the video with motion vector support:
+\begin{lstlisting}
+stream.codec_context.options = {"flags2": "+export_mvs"}
+\end{lstlisting}
+
+\subsection{Motion Vector Extraction}
+
+The class \texttt{MotionVector} holds:
+\begin{itemize}
+  \item \texttt{dst\_x}, \texttt{dst\_y}: current block location
+  \item \texttt{motion\_x}, \texttt{motion\_y}: movement delta
+  \item \texttt{motion\_scale}: scaling factor
+\end{itemize}
+
+The method \texttt{is\_in\_face()} checks whether a motion vector is inside a face region.
+
+The function \texttt{extract\_motion\_vectors\_and\_im()} processes each frame-face pair and returns a list of tuples: (MV\_x, MV\_y, IM). It handles I-frames (all-zero), P/B-frames with valid motion vectors, and cases where MVs are missing.
+
+Each motion vector is mapped to macroblocks, and we mark the intra-coded blocks via the \textbf{Information Mask (IM)}: 0 = inter-coded (has MV), 1 = intra-coded.
+
+All outputs are resized to 224×224 using appropriate interpolation.
+
+\subsection{Feature Computation}
+
+For each frame, the function \texttt{compute\_features\_frame()}:
+\begin{itemize}
+  \item Normalizes motion vectors over inter-coded regions (IM == 0)
+  \item Stacks MV\_x, MV\_y, IM into a 3-channel feature map
+\end{itemize}
+
+The function \texttt{compute\_features\_video\_tensor()} stacks all per-frame features into a video tensor: shape (frames, height, width, 3).
+
+\section{Training the Model}
+
+The classifier is based on \textbf{MobileNetV3}. It uses:
+\begin{itemize}
+  \item A modified first layer to handle custom channels
+  \item A binary output (sigmoid) for DeepFake prediction
+  \item Two-stream architecture: one for RGB, one for MV+IM
+\end{itemize}
+
+The final prediction is obtained by averaging the scores over 100 sampled frames per video.
+
+\section{Results}
+
+The MV-based method shows:
+\begin{itemize}
+  \item Faster inference compared to optical flow (RAFT)
+  \item Better cross-forgery generalization than RGB-only
+  \item Higher efficiency with minimal accuracy loss
+\end{itemize}
+
+The most significant bottleneck remains the face detection step, especially without GPU acceleration.
+
+\end{document}

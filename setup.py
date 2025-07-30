@@ -19,6 +19,7 @@ setup(
         "tensorflow",
         "opencv-python-headless>=4.5.5",
         "torch"
+        "torchvision"
     ],
     python_requires=">=3.10",
 )

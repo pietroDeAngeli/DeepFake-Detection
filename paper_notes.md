@@ -29,8 +29,6 @@ We can categorize DeepFake detection algorithms in 2 categories:
 Solutions that usually involves LTSMs, Transformes and process multiple frames at each time. It has been shown that usually two types of networks: one evaluates the RGB features and the other one the OF achieve better overall accuracy (but with high complexity cost). In the paper they used H.264 codec as approximation of OF. 
 
 
-**I could try to implement H.264**
-
 #### Motion vector as motion approximation
 H.264 are usually used to compress video, by dividing the frames into chunks and then calculate only the motion of the blocks intstead of the whole frame. 
 

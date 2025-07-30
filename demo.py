@@ -1,6 +1,7 @@
 import os
 import json
 import cv2
+import time
 os.environ['TF_ENABLE_ONEDNN_OPTS']  = '0'
 
 import tools.face_detection as faceDetection
@@ -15,15 +16,19 @@ if __name__ == "__main__":
     print("Initializing face detection...")
     detector = faceDetection.initialize_detector("models/face_detection_yunet_2023mar.onnx")
 
+    start = time.time()
     print("Extracting faces...")
-    results = faceDetection.extract_frames_with_faces(detector, video_path)
+    results = faceDetection.extract_frames_with_faces(detector, video_path, unique_frames=True)
+
+    end = time.time()
+    print(f"Tempo impiegato: {end - start:.4f} secondi")
 
     # Prepariamo la lista di FaceBox|None
     frames, faces = zip(*results)
     # ora `frames` e `faces` sono due tuple; se ti servono liste:
     frames = list(frames)
     video_faces  = list(faces)
-    print(video_faces)
+    print(f"There are {len(video_faces)} faces detected")
     
 
     face_boxes = [ 
@@ -78,7 +83,7 @@ if __name__ == "__main__":
         "frames": frames_info
     }
 
-    with open("informations.json", "w") as f:
-        json.dump(output, f, indent=2)
+    #with open("informations.json", "w") as f:
+    #    json.dump(output, f, indent=2)
 
     print("Done. JSON written to informations.json")
