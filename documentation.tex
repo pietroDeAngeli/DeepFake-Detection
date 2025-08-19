@@ -41,6 +41,11 @@ Due to hardware limitations, only a subset of the FaceForensics++ dataset is use
 
 The paper uses MVs from H.264 as a low-cost approximation of optical flow (OF). Unlike OF, which operates at the pixel level, MVs describe how macroblocks (e.g., 16×16 pixels) move across frames. While less precise, MVs are significantly faster to obtain.
 
+% Fix from here
+\section{Setup}
+To setup this project I created a \texttt{conda} envoiroment with \texttt{python==3.10} and a file \texttt{setup.py} to download automatically the dependencies by running \texttt{pip install .} from the main directory.
+% From here  
+
 \section{Project Structure}
 
 The project has the following directory structure:
@@ -50,18 +55,47 @@ The project has the following directory structure:
    |- video_1/
    |- ...
    |- video_N/
-|- FF++/
-   |- real/
-   |- fake/
 |- models/
 |- src/
    |- classifier/
+   |- data_preprocessing/
    |- tools/
 |- test/
 \end{verbatim}
 
+% Fix from here
+\subsection{\texttt{dataset}}
+The dataset is structured to in subdirectories, the FF++ dataset I downloaded by applying the pipeline described in the next section. The result has been stored by saving a directory for each video where we can find (for each video):
+\begin{itemize}
+  \item \texttt{meta.json}: containing the original path of the video, the label that says if video is \emph{real} or \emph{fake} (with a value true or false), and the number of frames we've been able to extract. It's usually 100 but could be less. 
+  \item \texttt{tensor.pt}: containig the stack of \texttt{motion_vector_x},\texttt{motion_vector_y},\texttt{information_mask} for each frame.
+  \item \texttt{faces}: in this directory there are the images of the faces detected in the frames.
+\end{itemize}
+
+There is also the file \texttt{manifest.json} containing 2 objects: train and test where each entry contains the name of the directory of the file and the label. The size of the two sets are 70\% for the train set and 30\% for the test set. 
+% To here
+
+\subsection{\texttt{models}}
+
+\begin{itemize}
+  \item \textbf{YuNet}: a pretrained face detector returning face bounding boxes and confidence scores. This model is the bottleneck of our system.
+  \item \textbf{Classifier}: This model is based on MobileNetV3 that takes both RGB and MV+IM features and returns the prediction so it's a two streams architecture that has been modified from the base version because of the input and output layer since the first has been adapted to handle 3 channels data for both streams (one for the RGB and one for mv_x,mv_y, IM) and the last layer to combine the results of the two networks. The paper just average on the two results but I decided to introduce a new parameter \texttt{alpha} to apply a weighted sum of the two networks. %TODO siamo sicuri di voler allenare un altro parametro? non penso che sia un gran dramma dal momento che ne alleno già parecchi
+\end{itemize}
+
+% fix from here
 \subsection{\texttt{src}}
 
+In this directory there is all the python code of the project, it's organized in directories that I'll described in the next subsections.
+
+\subsubsection{\texttt{Classifier}}
+% TODO
+In this directory is contained the preprocess of the network to adapt it to a two streams and the training file I will describe later. 
+% should I write more?
+
+\subsubsection{\texttt{data_preprocessing}}
+In this directory I describe the data preprocessing on the video and to split it. I call the function \texttt{create_dataset()} where for each video I run the pipeline and created the files and directories as described in the dataset section. Then I used the function \texttt{split_dataset()} to create the file \texttt{manifest.json}.
+
+\subsubsection{\texttt{tools}}
 Contains the implementation. In particular, the \texttt{tools} folder has:
 \begin{itemize}
   \item \texttt{face\_detection.py}
@@ -70,12 +104,12 @@ Contains the implementation. In particular, the \texttt{tools} folder has:
   \item \texttt{tools.py}
 \end{itemize}
 
-\subsection{\texttt{models}}
+I won't describe this section more deeply because I'll talk about this in the Pipeline section. 
 
-\begin{itemize}
-  \item \textbf{YuNet}: a pretrained face detector returning face bounding boxes and confidence scores.
-  \item \textbf{Classifier}: a MobileNetV3-based model that takes both RGB and MV+IM features and returns the prediction.
-\end{itemize}
+\subsection{\texttt{test}}
+In this directory there are the tests of the pipeline described below. They are just tests fo the result without the testing the whole pipeline. 
+% Should i write more?
+% to here
 
 \section{Pipeline}
 
@@ -119,13 +153,19 @@ All outputs are resized to 224×224 using appropriate interpolation.
 
 \subsection{Feature Computation}
 
-For each frame, the function \texttt{compute\_features\_frame()}:
+The function \texttt{compute\_features\_video\_tensor()} stacks all per-frame features into a video tensor: shape (frames, height, width, 3).
+
+
+To have the frame features we use the function \texttt{compute\_features\_frame()}:
 \begin{itemize}
   \item Normalizes motion vectors over inter-coded regions (IM == 0)
   \item Stacks MV\_x, MV\_y, IM into a 3-channel feature map
 \end{itemize}
 
-The function \texttt{compute\_features\_video\_tensor()} stacks all per-frame features into a video tensor: shape (frames, height, width, 3).
+% fix from here
+\subsection{Tools}
+In this file there is the function \texttt{get\_dir\_videos()} that could be helpful in every file and returns a list of the paths of all the the .mp4 files contained in the directory specified in the parameter \texttt{path}.
+% To here
 
 \section{Training the Model}
 
@@ -138,15 +178,11 @@ The classifier is based on \textbf{MobileNetV3}. It uses:
 
 The final prediction is obtained by averaging the scores over 100 sampled frames per video.
 
+The training has been done on 280 videos and tested on 120 and they are defined in the file \texttt{manifest.json}. 
+
+I used an Adam optimizer with learning rate set to ?? and trained on ?? epoches. poi non lo so. 
+
 \section{Results}
 
-The MV-based method shows:
-\begin{itemize}
-  \item Faster inference compared to optical flow (RAFT)
-  \item Better cross-forgery generalization than RGB-only
-  \item Higher efficiency with minimal accuracy loss
-\end{itemize}
-
-The most significant bottleneck remains the face detection step, especially without GPU acceleration.
 
 \end{document}
