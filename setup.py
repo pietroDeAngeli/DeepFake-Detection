@@ -11,14 +11,14 @@ setup(
     packages=find_packages(where="src"),
     install_requires=[ 
         "av==15.0.0", 
-        "matplotlib", 
-        "seaborn",
-        "tqdm",
-        "opencv-python",
-        "mtcnn",
-        "tensorflow",
+        "matplotlib==3.10.3", 
+        "seaborn==0.13.2",
+        "tqdm==4.67.1",
+        "opencv-python==4.12.0.88",
+        #"mtcnn",
+        "tensorflow==2.19.0",
         "opencv-python-headless>=4.5.5",
-        "torch"
+        "torch==2.7.1",
         "torchvision"
     ],
     python_requires=">=3.10",
