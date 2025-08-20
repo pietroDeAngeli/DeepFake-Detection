@@ -1,13 +1,13 @@
 *.zip
-F++/
+FF++/
+FF++_complete/
+*.png
 *.mp4
 *.jpg
 *.json
 **/__pycache__
 **/deepfake_tools.egg-info
 **/dataset
-*.onnx
 *.pth
-*.jpg
 
 
