@@ -11,10 +11,20 @@ import tools.feature_computation as featureComputation
 
 
 if __name__ == "__main__":
-    video_path = "FF++/real/01__exit_phone_room.mp4"
+    isOnColab = False
+    
+    video_path = "FF++_complete/original_sequences/youtube/c23/videos/183.mp4"
+    model_path = "models/face_detection_yunet_2023mar.onnx"
+    out_dir_faces = "dataset/face_images"
+
+    # Colab setup
+    if isOnColab:
+        video_path = "/content/drive/MyDrive/DeepFake - Detection/" + video_path
+        model_path = "/content/drive/MyDrive/DeepFake - Detection/" + model_path
+        out_dir_faces = "/content/drive/MyDrive/DeepFake - Detection/" + out_dir_faces        
 
     print("Initializing face detection...")
-    detector = faceDetection.initialize_detector("models/face_detection_yunet_2023mar.onnx")
+    detector = faceDetection.initialize_detector(model_path)
 
     start = time.time()
     print("Extracting faces...")
@@ -55,6 +65,8 @@ if __name__ == "__main__":
     )
 
     print("Building JSON dump with per-frame info...")
+
+    os.makedirs(out_dir_faces, exist_ok=True)
     frames_info = []
     for idx, face in enumerate(video_faces):
         info = {"frame_index": idx}
@@ -62,7 +74,7 @@ if __name__ == "__main__":
         # Save image
         if face is not None: 
             filename = os.path.splitext(os.path.basename(video_path))[0]
-            img_path = f"dataset/face_images/{filename}_{idx}.jpg"
+            img_path = f"{out_dir_faces}/{filename}_{idx}.jpg"
             cv2.imwrite(img_path, face.image)
             info["image_path"] = img_path 
         else:
