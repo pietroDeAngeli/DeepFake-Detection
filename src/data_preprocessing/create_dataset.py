@@ -17,10 +17,15 @@ if __name__ == "__main__":
     real_dir = "../FF++/real"
     model_path = "../models/face_detection_yunet_2023mar.onnx"
     out_dir = "../dataset"
-
+    
+    #label = True  # Set to True for real videos, False for fake videos
     label = False
 
-    videos_path = tools.get_dir_videos(fake_dir)
+    video_path = ""
+    if label:
+        videos_path = tools.get_dir_videos(real_dir)
+    else:
+        videos_path = tools.get_dir_videos(fake_dir)
 
     # Import the detector
     detector = faceDetection.initialize_detector(model_path)

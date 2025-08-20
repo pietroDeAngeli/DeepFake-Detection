@@ -1,18 +1,18 @@
 # evaluation.py
-
 import os
 import json
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import cv2
 from tqdm import tqdm
 
-import classifier.network as nw
+import classifier.network as nw  # your two-stream MLP
 
 class VideoDataset(Dataset):
     def __init__(self, entries, dataset_path):
         """
-        entries: list of dicts with keys "video", "label"
+        entries: list of dicts with keys {"video": <id>, "label": 0/1}
         dataset_path: root folder containing one subfolder per video
         """
         self.entries = entries
@@ -26,67 +26,88 @@ class VideoDataset(Dataset):
         video_dir = os.path.join(self.dataset_path, entry["video"])
         label     = entry["label"]
 
-        # Load MV+IM features saved as tensors.pt (float32)
+        # 1) Load MV+IM features saved as tensors.pt (float32)
         tensor_path = os.path.join(video_dir, "tensors.pt")
-        features    = torch.load(tensor_path)["features"]      # [N, H, W, 3], float32
-        mv_tensor   = features.permute(0, 3, 1, 2).float()     # [N, 3, H, W]
+        features    = torch.load(tensor_path)["features"]     # [N, H, W, 3], float32
+        mv_tensor   = features.permute(0, 3, 1, 2).float()    # [N, 3, H, W]
 
-        # Load cropped face images (RGB uint8) and convert to float32
+        # 2) Load cropped face images (RGB) → float32 in [0,1]
         faces_dir = os.path.join(video_dir, "faces")
         img_files = sorted(os.listdir(faces_dir))
         imgs = []
         for fname in img_files:
             img = cv2.imread(os.path.join(faces_dir, fname))
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = torch.from_numpy(img).permute(2, 0, 1).float()  # [3, H, W]
-            img = img.div(255.0)                                  # normalize to [0,1]
+            img = torch.from_numpy(img).permute(2, 0, 1).float().div(255.0)  # [3,H,W] in [0,1]
             imgs.append(img)
-        imgs_tensor = torch.stack(imgs, dim=0)                   # [N, 3, H, W]
+        imgs_tensor = torch.stack(imgs, dim=0)                                # [N,3,H,W]
 
         # Return ((rgb_frames, mv_frames), label)
         return (imgs_tensor, mv_tensor), torch.tensor([label], dtype=torch.float32)
 
+@torch.no_grad()
 def evaluate(model, dataloader, device):
     """
-    Run evaluation on the test set and return accuracy.
+    Minimal evaluation: returns accuracy, avg BCE loss, and confusion matrix counts.
     """
     model.eval()
+    criterion = nn.BCELoss()
+
+    total = 0
     correct = 0
-    total   = 0
-    with torch.no_grad():
-        for (imgs, mvs), label in tqdm(dataloader, desc="Evaluating"):
-            # remove leading batch dimension ([1, N, C, H, W] -> [N, C, H, W])
-            imgs  = imgs[0].to(device)
-            mvs   = mvs[0].to(device)
-            label = label.to(device).view(-1)  # shape [1]
+    loss_sum = 0.0
 
-            output = model((imgs, mvs))        # [1]
-            pred   = (output >= 0.5).float()   # threshold at 0.5
-            correct += (pred == label).sum().item()
-            total   += 1
+    tp = tn = fp = fn = 0
 
-    return correct / total if total > 0 else 0.0
+    for (imgs, mvs), label in tqdm(dataloader, desc="Evaluating"):
+        # unpack batch size 1: [1,N,3,H,W] -> [N,3,H,W]
+        imgs  = imgs[0].to(device)
+        mvs   = mvs[0].to(device)
+        label = label.to(device).view(-1)   # [1], float32 0/1
+
+        prob = model((imgs, mvs))           # [1], sigmoid already in your model
+        loss = criterion(prob, label)
+        loss_sum += loss.item()
+
+        pred = (prob >= 0.5).float()        # threshold @ 0.5
+        correct += (pred == label).sum().item()
+        total += 1
+
+        # confusion matrix counts
+        y = int(label.item())
+        p = int(pred.item())
+        if y == 1 and p == 1: tp += 1
+        elif y == 0 and p == 0: tn += 1
+        elif y == 0 and p == 1: fp += 1
+        elif y == 1 and p == 0: fn += 1
+
+    acc = correct / total if total > 0 else 0.0
+    avg_loss = loss_sum / total if total > 0 else 0.0
+    return acc, avg_loss, {"tp": tp, "tn": tn, "fp": fp, "fn": fn, "total": total}
 
 if __name__ == "__main__":
-    # Paths
+    # Paths (adjust as needed)
     dataset_path  = "../../dataset"
     manifest_path = os.path.join(dataset_path, "manifest.json")
-    checkpoint    = "mlp_best.pth"  # or your desired checkpoint
+    checkpoint    = "mlp_best.pth"  # path to your trained model
 
-    # Load train/test split
+    # Load test split
     with open(manifest_path, "r") as f:
         manifest = json.load(f)
     test_entries = manifest["test"]
 
-    # Create test DataLoader
+    # DataLoader
     test_ds     = VideoDataset(test_entries, dataset_path)
-    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=4, pin_memory=True)
 
-    # Initialize and load model
+    # Model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model  = nw.MLP(in_channels=3).to(device)
     model.load_state_dict(torch.load(checkpoint, map_location=device))
 
-    # Run evaluation
-    accuracy = evaluate(model, test_loader, device)
-    print(f"Test Accuracy: {accuracy*100:.2f}%")
+    # Run eval
+    acc, avg_loss, cm = evaluate(model, test_loader, device)
+
+    print(f"\nTest Accuracy: {acc*100:.2f}%")
+    print(f"Avg BCE Loss:  {avg_loss:.4f}")
+    print(f"Confusion Matrix counts: {cm}")

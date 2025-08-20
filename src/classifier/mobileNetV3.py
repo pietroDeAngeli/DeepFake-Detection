@@ -5,8 +5,9 @@ from torchvision.models import mobilenet_v3_small
 class MobileNetV3_adaption(nn.Module):
     def __init__(self, in_channels: int = 3):
         super(MobileNetV3_adaption, self).__init__()
-        # 1) Load a MobileNetV3 backbone with random initialization
-        self.backbone = mobilenet_v3_small(weights=None)
+        # 1) Load the MobileNetV3 model
+        #self.backbone = mobilenet_v3_small(weights=None)
+        self.backbone = mobilenet_v3_small(weights="DEFAULT") # Use a pretrained model
 
         # 2) Adapt the first conv layer to accept `in_channels` input channels
         orig_conv = self.backbone.features[0][0]
