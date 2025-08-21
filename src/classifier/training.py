@@ -23,36 +23,6 @@ def set_seed(seed: int = 42):
 
 
 # -----------------------------
-# Simple K-Fold splitter (no sklearn dependency)
-# -----------------------------
-def make_folds(n_items: int, k_folds: int = 5, seed: int = 42):
-    """
-    Returns a list of (train_idx, val_idx) tuples for K-Fold CV.
-    Indices are shuffled once with the given seed, then split into k folds.
-    """
-    rng = np.random.default_rng(seed)
-    idx = np.arange(n_items)
-    rng.shuffle(idx)
-
-    folds = []
-    fold_sizes = [n_items // k_folds] * k_folds
-    for i in range(n_items % k_folds):
-        fold_sizes[i] += 1
-
-    current = 0
-    parts = []
-    for fsz in fold_sizes:
-        parts.append(idx[current: current + fsz])
-        current += fsz
-
-    for f in range(k_folds):
-        val_idx = parts[f]
-        train_idx = np.concatenate([parts[i] for i in range(k_folds) if i != f])
-        folds.append((train_idx, val_idx))
-    return folds
-
-
-# -----------------------------
 # Dataset
 # -----------------------------
 class VideoDataset(Dataset):
@@ -80,7 +50,7 @@ class VideoDataset(Dataset):
 
         # 2) Load cropped face images (RGB uint8) and convert to float32
         faces_dir = os.path.join(video_dir, "faces")
-        img_files = sorted(os.listdir(faces_dir))
+        img_files = sorted(os.listdir(faces_dir))             # N=100 frame per video (fissi)
         imgs = []
         for fname in img_files:
             img = cv2.imread(os.path.join(faces_dir, fname))
@@ -98,27 +68,20 @@ class VideoDataset(Dataset):
 # Training utilities
 # -----------------------------
 def evaluate(model, loader, device, criterion):
-    """
-    Evaluates avg loss on the given loader.
-    Each batch is 1 video: imgs [1,N,3,H,W], mvs [1,N,3,H,W], label [1,1].
-    """
     model.eval()
     total_loss = 0.0
     with torch.no_grad():
         for (imgs, mvs), label in loader:
             imgs  = imgs[0].to(device)            # [N, 3, H, W]
             mvs   = mvs[0].to(device)             # [N, 3, H, W]
-            label = label.to(device).view(-1)      # [1]
-            out   = model((imgs, mvs))             # [1]
+            label = label.to(device).view(-1)     # [1]
+            out   = model((imgs, mvs))            # [1]
             loss  = criterion(out, label)
             total_loss += loss.item()
     return total_loss / max(1, len(loader))
 
 
 def train_one_epoch(model, loader, device, criterion, optimizer, desc="Train"):
-    """
-    Trains for one epoch and returns avg train loss.
-    """
     model.train()
     running = 0.0
     for (imgs, mvs), label in tqdm(loader, desc=desc, leave=False):
@@ -126,7 +89,7 @@ def train_one_epoch(model, loader, device, criterion, optimizer, desc="Train"):
         mvs   = mvs[0].to(device)
         label = label.to(device).view(-1)
 
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
         out  = model((imgs, mvs))
         loss = criterion(out, label)
         loss.backward()
@@ -137,86 +100,94 @@ def train_one_epoch(model, loader, device, criterion, optimizer, desc="Train"):
 
 
 # -----------------------------
-# Main with K-Fold CV + Early Stopping + Loss logging
+# Main: single split (fixed val = 10%)
 # -----------------------------
 if __name__ == "__main__":
     set_seed(42)
 
+    isOnColab = True
+
     # Paths
     dataset_path  = "../../dataset"
+    if isOnColab:
+        dataset_path = "/content/drive/MyDrive/DeepFake - Detection/dataset"
     manifest_path = os.path.join(dataset_path, "manifest.json")
 
-    # Read train/test split from manifest.json
+    # Read train split from manifest.json
     with open(manifest_path, "r") as f:
         manifest = json.load(f)
-    train_entries = manifest["train"]   # list of dicts: {"video": "...", "label": 0/1}
+    all_entries = manifest["train"]   # list of dicts: {"video": "...", "label": 0/1}
+
+    # Fixed validation split = 10% (deterministico)
+    rng = np.random.default_rng(42)
+    idx_all = np.arange(len(all_entries))
+    rng.shuffle(idx_all)
+    val_size = max(1, int(0.10 * len(idx_all)))
+    val_idx  = idx_all[:val_size]
+    train_idx= idx_all[val_size:]
+
+    # Datasets
+    full_ds   = VideoDataset(all_entries, dataset_path)
+    train_ds  = Subset(full_ds, train_idx)
+    val_ds    = Subset(full_ds, val_idx)
 
     # Config
-    k_folds            = 5
     epochs             = 30
-    early_patience     = 5          # stop if no val improvement for these many epochs
-    early_min_delta    = 1e-4       # minimal improvement to reset patience
     lr                 = 1e-4
-    num_workers        = 4
-    batch_size         = 1          # 1 video per batch (keeps memory usage bounded)
-    out_dir            = "runs_cv"
+    num_workers        = 2 
+    batch_size         = 1
+    out_dir            = "run_single_split"
     os.makedirs(out_dir, exist_ok=True)
 
     device    = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    full_ds   = VideoDataset(train_entries, dataset_path)
-    folds     = make_folds(len(full_ds), k_folds=k_folds, seed=42)
 
-    for fold_id, (tr_idx, va_idx) in enumerate(folds, start=1):
-        print(f"\n===== Fold {fold_id}/{k_folds} =====")
-        fold_dir = os.path.join(out_dir, f"fold_{fold_id}")
-        os.makedirs(fold_dir, exist_ok=True)
+    # Dataloaders
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,
+                              num_workers=num_workers, pin_memory=(device.type=="cuda"))
+    val_loader   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False,
+                              num_workers=num_workers, pin_memory=(device.type=="cuda"))
 
-        train_ds = Subset(full_ds, tr_idx)
-        val_ds   = Subset(full_ds, va_idx)
+    # Model / Optim
+    model     = nw.MLP(in_channels=3).to(device)
+    criterion = nn.BCELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=num_workers, pin_memory=True)
-        val_loader   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    # Train loop with early stopping on fixed val
+    train_losses, val_losses = [], []
+    best_val = math.inf
+    best_ep  = -1
+    early_patience  = 5
+    early_min_delta = 1e-4
+    patience = 0
 
-        model     = nw.MLP(in_channels=3).to(device)
-        criterion = nn.BCELoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    for ep in range(1, epochs + 1):
+        avg_tr = train_one_epoch(model, train_loader, device, criterion, optimizer,
+                                 desc=f"Epoch {ep}/{epochs}")
+        avg_va = evaluate(model, val_loader, device, criterion)
 
-        train_losses, val_losses = [], []
-        best_val = math.inf
-        best_ep  = -1
-        patience = 0
+        train_losses.append(avg_tr)
+        val_losses.append(avg_va)
 
-        for ep in range(1, epochs + 1):
-            avg_tr = train_one_epoch(model, train_loader, device, criterion, optimizer, desc=f"Fold {fold_id} | Epoch {ep}/{epochs}")
-            avg_va = evaluate(model, val_loader, device, criterion)
+        print(f"Epoch {ep:03d} | TrainLoss: {avg_tr:.4f} | ValLoss: {avg_va:.4f}")
 
-            train_losses.append(avg_tr)
-            val_losses.append(avg_va)
+        # Early stopping
+        if avg_va < best_val - early_min_delta:
+            best_val = avg_va
+            best_ep  = ep
+            patience = 0
+            torch.save(model.state_dict(), os.path.join(out_dir, "best_model.pth"))
+            with open(os.path.join(out_dir, "best_summary.json"), "w") as f:
+                json.dump({"best_epoch": best_ep, "best_val_loss": best_val}, f, indent=2)
+        else:
+            patience += 1
+            if patience >= early_patience:
+                print(f"Early stopping at epoch {ep} (best epoch {best_ep})")
+                break
 
-            print(f"[Fold {fold_id}] Epoch {ep:03d} | TrainLoss: {avg_tr:.4f} | ValLoss: {avg_va:.4f}")
+    # Save losses
+    log = {"train_loss": train_losses, "val_loss": val_losses,
+           "best_epoch": best_ep, "best_val_loss": best_val}
+    with open(os.path.join(out_dir, "losses.json"), "w") as f:
+        json.dump(log, f, indent=2)
 
-            # Early stopping check
-            if avg_va < best_val - early_min_delta:
-                best_val = avg_va
-                best_ep  = ep
-                patience = 0
-                torch.save(model.state_dict(), os.path.join(fold_dir, "best_model.pth"))
-                with open(os.path.join(fold_dir, "best_summary.json"), "w") as f:
-                    json.dump({"best_epoch": best_ep, "best_val_loss": best_val}, f, indent=2)
-            else:
-                patience += 1
-                if patience >= early_patience:
-                    print(f"[Fold {fold_id}] Early stopping at epoch {ep} (best epoch {best_ep})")
-                    break
-
-        # Save losses log for the fold
-        log = {
-            "train_loss": train_losses,
-            "val_loss": val_losses,
-            "best_epoch": best_ep,
-            "best_val_loss": best_val
-        }
-        with open(os.path.join(fold_dir, "losses.json"), "w") as f:
-            json.dump(log, f, indent=2)
-
-    print("\nDone. Per-fold artifacts are in:", os.path.abspath(out_dir))
+    print("\nDone. Artifacts in:", os.path.abspath(out_dir))
