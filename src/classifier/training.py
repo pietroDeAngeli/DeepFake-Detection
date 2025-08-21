@@ -94,7 +94,7 @@ if __name__ == "__main__":
     set_seed(42)
 
     isOnColab = True
-    dataset_path  = "/content/dataset_local" if isOnColab else "../../dataset"
+    dataset_path  = "/content/drive/MyDrive/DeepFake - Detection/dataset" if isOnColab else "../../dataset"
     manifest_path = os.path.join(dataset_path, "manifest.json")
 
     with open(manifest_path, "r") as f:
