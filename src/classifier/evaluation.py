@@ -4,10 +4,10 @@ import json
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-import cv2
 from tqdm import tqdm
 
 import classifier.network as nw  # your two-stream MLP
+import tools.tools as tools  # for loading video data
 
 class VideoDataset(Dataset):
     def __init__(self, entries, dataset_path):
@@ -26,24 +26,7 @@ class VideoDataset(Dataset):
         video_dir = os.path.join(self.dataset_path, entry["video"])
         label     = entry["label"]
 
-        # 1) Load MV+IM features saved as tensors.pt (float32)
-        tensor_path = os.path.join(video_dir, "tensors.pt")
-        features    = torch.load(tensor_path)["features"]     # [N, H, W, 3], float32
-        mv_tensor   = features.permute(0, 3, 1, 2).float()    # [N, 3, H, W]
-
-        # 2) Load cropped face images (RGB) → float32 in [0,1]
-        faces_dir = os.path.join(video_dir, "faces")
-        img_files = sorted(os.listdir(faces_dir))
-        imgs = []
-        for fname in img_files:
-            img = cv2.imread(os.path.join(faces_dir, fname))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = torch.from_numpy(img).permute(2, 0, 1).float().div(255.0)  # [3,H,W] in [0,1]
-            imgs.append(img)
-        imgs_tensor = torch.stack(imgs, dim=0)                                # [N,3,H,W]
-
-        # Return ((rgb_frames, mv_frames), label)
-        return (imgs_tensor, mv_tensor), torch.tensor([label], dtype=torch.float32)
+        return tools.load_video_data(video_dir, label, augment_fn=None)
 
 @torch.no_grad()
 def evaluate(model, dataloader, device):
@@ -87,7 +70,7 @@ def evaluate(model, dataloader, device):
 
 if __name__ == "__main__":
     # Paths (adjust as needed)
-    dataset_path  = "../../dataset"
+    dataset_path  = "../../../dataset"
     manifest_path = os.path.join(dataset_path, "manifest.json")
     checkpoint    = "mlp_best.pth"  # path to your trained model
 

@@ -9,6 +9,8 @@ from tqdm import tqdm
 import cv2
 import numpy as np
 
+import tools.tools as tools  # for loading video data
+
 # Try to import Albumentations; if missing, we will skip augmentations gracefully
 try:
     import albumentations as A
@@ -140,36 +142,7 @@ class VideoDataset(Dataset):
         video_dir = os.path.join(self.dataset_path, entry["video"])
         label     = entry["label"]
 
-        # 1) Load MV+IM feature tensor: [N, H, W, 3] with channels (mvx, mvy, im)
-        tensor_path = os.path.join(video_dir, "tensors.pt")
-        data        = torch.load(tensor_path)
-        features    = data["features"]                          # [N, H, W, 3], float32
-        mv_tensor   = features.permute(0, 3, 1, 2).float()      # [N, 3, H, W]
-
-        # 2) Load face RGB frames as float in [0,1] → [N, 3, H, W]
-        faces_dir = os.path.join(video_dir, "faces")
-        img_files = sorted(os.listdir(faces_dir))               # expected N=100
-        imgs = []
-        for fname in img_files:
-            img = cv2.imread(os.path.join(faces_dir, fname))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = torch.from_numpy(img).permute(2, 0, 1).float() / 255.0
-            imgs.append(img)
-        imgs_tensor = torch.stack(imgs, dim=0)                  # [N, 3, H, W]
-
-        # 3) Apply augmentations frame-by-frame (train only)
-        if self.augment:
-            aug_imgs = []
-            aug_mvs  = []
-            for i in range(imgs_tensor.size(0)):
-                img_i, mv_i = self._apply_augs_one(imgs_tensor[i], mv_tensor[i])
-                aug_imgs.append(img_i)
-                aug_mvs.append(mv_i)
-            imgs_tensor = torch.stack(aug_imgs, dim=0)
-            mv_tensor   = torch.stack(aug_mvs,  dim=0)
-
-        # BCEWithLogits expects float target; model forward expects ((imgs, mvs))
-        return (imgs_tensor, mv_tensor), torch.tensor([[label]], dtype=torch.float32)
+        return tools.load_video_data(video_dir, label, augment_fn=self.augment_fn)
 
 # -----------------------------
 # Train / Eval
