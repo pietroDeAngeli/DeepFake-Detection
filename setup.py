@@ -15,11 +15,12 @@ setup(
         "seaborn==0.13.2",
         "tqdm==4.67.1",
         "opencv-python==4.12.0.88",
+        "albumentations",
         #"mtcnn",
-        "tensorflow==2.19.0",
-        "opencv-python-headless>=4.5.5",
-        "torch==2.7.1",
-        "torchvision"
+        #"tensorflow==2.19.0",
+        #"opencv-python-headless>=4.5.5",
+        #"torch==2.7.1",
+        #"torchvision"
     ],
     python_requires=">=3.10",
 )
