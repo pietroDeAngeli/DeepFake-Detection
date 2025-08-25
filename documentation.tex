@@ -23,28 +23,21 @@
 \begin{document}
 \maketitle
 \tableofcontents
-\newpage
+%\newpage
 
 \section{Introduction}
 
-This project, part of the “Signal, Image and Video Processing” course, implements the paper \emph{"Efficient Temporally-Aware DeepFake Detection using H.264 Motion Vectors"}. The goal is to distinguish between DeepFake and real videos using \textbf{motion vectors} (MVs), a lightweight alternative to optical flow.
+This project, part of the “Signal, Image and Video Processing” course, implements the paper \emph{"Efficient Temporally-Aware DeepFake Detection using H.264 Motion Vectors"}. The goal is to distinguish between DeepFake and real videos using \textbf{motion vectors} (MVs), a lightweight alternative to \textbf{Pptical flow} (OF).
 
-MVs can be extracted directly from the H.264 video encoding (if supported), without further computation. Only motion vectors inside face regions are used, which are detected using the pretrained \textbf{YuNet} face detector—a faster alternative to the MTCNN used in the original paper.
+MVs can be extracted directly from the H.264 video encoding (if supported), without further computation. Only motion vectors inside face regions are used, which are detected using the pretrained \textbf{YuNet} face detector (a lighter alternative to MTCNN used in the original paper).
 
-The architecture consists of two identical MobileNetV3 networks, one processing RGB images and the other processing MV+IM tensors. Their outputs are then concatenated to produce a final binary classification.
+The architecture consists of two identical MobileNetV3 networks, whose architecture has been slightly modified and where one process RGB images and the other processing MV+IM tensors. Their outputs are then combined to produce a final binary classification.
 
 The paper criticizes traditional methods for only using per-frame predictions without considering temporal consistency. This solution leverages such temporal information by comparing how content moves across frames.
 
-Due to hardware limitations, only a subset of the FaceForensics++ dataset is used. While training is limited, inference is efficient—bottlenecked mostly by face detection.
-
-\section{Background}
-
 The paper uses MVs from H.264 as a low-cost approximation of optical flow (OF). Unlike OF, which operates at the pixel level, MVs describe how macroblocks (e.g., 16×16 pixels) move across frames. While less precise, MVs are significantly faster to obtain.
 
-% Fix from here
-\section{Setup}
-To setup this project I created a \texttt{conda} envoiroment with \texttt{python==3.10} and a file \texttt{setup.py} to download automatically the dependencies by running \texttt{pip install .} from the main directory.
-% From here  
+Their goal were to find a lighter version of optical flow that could have been used online and on low efficiency devices, however inference is efficient—bottlenecked mostly by face detection.
 
 \section{Project Structure}
 
@@ -52,50 +45,80 @@ The project has the following directory structure:
 
 \begin{verbatim}
 |- dataset/
-   |- video_1/
+   |- video\_1/
    |- ...
-   |- video_N/
+   |- video\_N/
+|FF++
 |- models/
 |- src/
    |- classifier/
-   |- data_preprocessing/
+   |- data\_preprocessing/
    |- tools/
+   |- UI
 |- test/
 \end{verbatim}
 
 % Fix from here
+\subsection{\texttt{FF++}}
+The Dataset I downloaded is \href{https://www.kaggle.com/datasets/hungle3401/faceforensics}{https://www.kaggle.com/datasets/hungle3401/faceforensics} which is a really small subset of the real one, I decided to pick this one just because it would have been much easier and less expensive to "train" it and implement a sort of Prove of Concept. 
+
+The original dataset was consisted of two directories: 
+\begin{itemize}
+    \item \emph{real}: Contains original videos (200). 
+    \item \emph{fake}: contains Deepfakes videos (200).  
+\end{itemize}
+
 \subsection{\texttt{dataset}}
-The dataset is structured to in subdirectories, the FF++ dataset I downloaded by applying the pipeline described in the next section. The result has been stored by saving a directory for each video where we can find (for each video):
+The dataset described above has been preprocessed and structured in subdirectories, as described in the \emph{data\_preprocessing} section \ref{sec:data_preprocessing}. The result has been stored by saving a directory for each video:
 \begin{itemize}
   \item \texttt{meta.json}: containing the original path of the video, the label that says if video is \emph{real} or \emph{fake} (with a value true or false), and the number of frames we've been able to extract. It's usually 100 but could be less. 
-  \item \texttt{tensor.pt}: containig the stack of \texttt{motion_vector_x},\texttt{motion_vector_y},\texttt{information_mask} for each frame.
+  \item \texttt{tensor.pt}: containing the stack of \texttt{motion\_vector\_x},\texttt{motion\_vector\_y},\texttt{information\_mask} for each frame.
   \item \texttt{faces}: in this directory there are the images of the faces detected in the frames.
 \end{itemize}
 
-There is also the file \texttt{manifest.json} containing 2 objects: train and test where each entry contains the name of the directory of the file and the label. The size of the two sets are 70\% for the train set and 30\% for the test set. 
+There is also the file \texttt{manifest.json} containing 2 objects: train and test where each entry contains the name of the directory of the file and the label. The size of the two sets are 80\% for the train set and 20\% for the test set. 
+
+The manifest file has been created by a file contained and described here \ref{sec:data_preprocessing}
 % To here
 
 \subsection{\texttt{models}}
+\label{sec:models}
 
 \begin{itemize}
-  \item \textbf{YuNet}: a pretrained face detector returning face bounding boxes and confidence scores. This model is the bottleneck of our system.
-  \item \textbf{Classifier}: This model is based on MobileNetV3 that takes both RGB and MV+IM features and returns the prediction so it's a two streams architecture that has been modified from the base version because of the input and output layer since the first has been adapted to handle 3 channels data for both streams (one for the RGB and one for mv_x,mv_y, IM) and the last layer to combine the results of the two networks. The paper just average on the two results but I decided to introduce a new parameter \texttt{alpha} to apply a weighted sum of the two networks. %TODO siamo sicuri di voler allenare un altro parametro? non penso che sia un gran dramma dal momento che ne alleno già parecchi
+  \item \textbf{YuNet}: a pretrained face detector returning face bounding boxes and confidence scores. This model is the bottleneck of our system. We use it to extract the faces from 100 random and unique frames of the video. 
+  
+  \item \textbf{Classifier}: \label{sec:model_changes}This model is based on \textbf{MobileNetV3 small} (downloaded with the pretrained weights) that takes both RGB and MV+IM features (two streams architecture) and returns the predictions of the video to be fake or not.  
+  
+  
+  The paper suggests to modify the base version of the network by adding an \textbf{input} (3 channels for 224x224 images) and \textbf{output} (one classification value). In addition to the changes on the base model we also add a parameter that applies a weighted average to the results of the two streams; however, the averaging implemented by the paper does not contain any parameter.  
 \end{itemize}
 
 % fix from here
 \subsection{\texttt{src}}
 
-In this directory there is all the python code of the project, it's organized in directories that I'll described in the next subsections.
+In this directory there is the \textit{Python} code of the project, it is organized in directories that I will describe below.
 
 \subsubsection{\texttt{Classifier}}
 % TODO
-In this directory is contained the preprocess of the network to adapt it to a two streams and the training file I will describe later. 
-% should I write more?
+This directory are contains the processing applied to create the architecture of the \texttt{Classifier} described \ref{sec:model_changes} 
 
-\subsubsection{\texttt{data_preprocessing}}
-In this directory I describe the data preprocessing on the video and to split it. I call the function \texttt{create_dataset()} where for each video I run the pipeline and created the files and directories as described in the dataset section. Then I used the function \texttt{split_dataset()} to create the file \texttt{manifest.json}.
+Here we have the following files:
+\begin{itemize}
+    \item \texttt{MobileNetV3.py}: which download the pretrained model and add the layers. 
+    \item \texttt{network.py}: where the two streams architecture has been created.
+    \item \texttt{training.py}: where we implement the training as described in Section \ref{sec:training}
+    \item \texttt{evaluation.py}: where we test the accuracy of the network we trained.
+\end{itemize}
+
+\subsubsection{\texttt{Data\_preprocessing}}
+\label{sec:data_preprocessing}
+In this directory, is described the data pre-processing of the dataset and the splits of the training and test. 
+
+In the file \texttt{create\_dataset.py} each video gets processed using the pipeline described in section \ref{sec:pipeline} and cerate the dataset as described in \ref{}
+Then I used the function \texttt{split\_dataset()} to create the file \texttt{manifest.json} to create the train and test split (80-20\% respectively).
 
 \subsubsection{\texttt{tools}}
+\label{sec:tools}
 Contains the implementation. In particular, the \texttt{tools} folder has:
 \begin{itemize}
   \item \texttt{face\_detection.py}
@@ -104,15 +127,30 @@ Contains the implementation. In particular, the \texttt{tools} folder has:
   \item \texttt{tools.py}
 \end{itemize}
 
+\subsection{Tools}
+In this file there is the function \texttt{get\_dir\_videos()} that could be helpful in every file and returns a list of the paths of all the the .mp4 files contained in the directory specified in the parameter \texttt{path}. Here is also defined the function \texttt{pipeline()} that run the whole inference function.
+
 I won't describe this section more deeply because I'll talk about this in the Pipeline section. 
 
+\subsubsection{\texttt{UI}}
+In this directory there is just a file, that defines a simple user interface structured as follow:
+\begin{itemize}
+    \item Upload Page: it has a Drag and drop option or a browse file to chose the video we want to analyze. By clicking on Detect we start the processing
+    \item Progress Page: it's the page that make us wait the computation
+    \item Result Page: it's the page that tells us the results: the time spent on each phase: face extraction, motion vector extraction and classification task; it will also show a button "go to the directory" to open the temp dir that will contain the 100 faces extracted and the time spent for each phase. 
+\end{itemize}
+
+
 \subsection{\texttt{test}}
-In this directory there are the tests of the pipeline described below. They are just tests fo the result without the testing the whole pipeline. 
-% Should i write more?
-% to here
+In this directory there are the tests of the functions in \texttt{src} directory. The tests has been done using \texttt{pytest} and only the numeric output has been tested checking the following:
+\begin{itemize}
+    \item %TODO chatgpt, complete this part. 
+\end{itemize}
 
 \section{Pipeline}
+\label{sec:pipeline}
 
+The pipeline has described in the next sections. A complete version of the inference pipeline has been implemented in the file \texttt{tools.py} (\ref{sec:tools}) with the funciton \texttt{pipeline()}.
 \subsection{Face Detection}
 
 The paper suggests using MTCNN, but YuNet is used instead for efficiency. We define two classes:
@@ -131,7 +169,7 @@ Frame extraction is done via:
 
 The wrapper \texttt{extract\_frames\_with\_faces()} chooses between the two, depending on the \texttt{unique\_frames} flag. These functions return up to 100 tuples of (frame, face), opening the video with motion vector support:
 \begin{lstlisting}
-stream.codec_context.options = {"flags2": "+export_mvs"}
+stream.codec\_context.options = {"flags2": "+export\_mvs"}
 \end{lstlisting}
 
 \subsection{Motion Vector Extraction}
@@ -163,26 +201,53 @@ To have the frame features we use the function \texttt{compute\_features\_frame(
 \end{itemize}
 
 % fix from here
-\subsection{Tools}
-In this file there is the function \texttt{get\_dir\_videos()} that could be helpful in every file and returns a list of the paths of all the the .mp4 files contained in the directory specified in the parameter \texttt{path}.
+\subsection{Classification}
+Then the images extracted in the Face Detection phase and the tensors with the motion vectors are ready to fed the network. So the network is restored from the directory \texttt{models} \ref{sec:models}. Then all the input pass into the network and we have the result.
 % To here
 
 \section{Training the Model}
+\label{sec:training}
 
-The classifier is based on \textbf{MobileNetV3}. It uses:
+The training has been done on 380 videos and tested on 80 and they are defined in the file \texttt{manifest.json}. The setup of the training has been done on 30 epochs but thanks to the early stopping implemented using K-fold only 18 has been completed. However the training is not relevant here because the training set is really small and we don't expect any results from that. However in the training phase we can notice the training error is linearly decreasing while the validation set is concanve, in particular gets the lower value at epoch 13, which is the epoch where the model is saved. 
+
+\subsection{Augmentation}
+As suggested in the paper the files in the train set has been augmented I kept a solution "on the fly" by applying the augmentations only at training time under a certain probability. I used the library \texttt{albumentations} to apply:
 \begin{itemize}
-  \item A modified first layer to handle custom channels
-  \item A binary output (sigmoid) for DeepFake prediction
-  \item Two-stream architecture: one for RGB, one for MV+IM
+    \item RGB distortion
+    \item White noise
+    ...% TODO
 \end{itemize}
 
-The final prediction is obtained by averaging the scores over 100 sampled frames per video.
+\subsection{Evaluation}
+% TODO
 
-The training has been done on 280 videos and tested on 120 and they are defined in the file \texttt{manifest.json}. 
+\section{Tools \& Technologies}
+In this section we will analyze the tools used and the tecnologies impegate in the project. 
 
-I used an Adam optimizer with learning rate set to ?? and trained on ?? epoches. poi non lo so. 
+\subsection{Conda}
+To setup this project I created a \texttt{conda} envoiroment with \texttt{python==3.10} and a file \texttt{setup.py} to download automatically the dependencies by running \texttt{pip install .} from the main directory.
+
+\subsection{Libraries}
+The External libraries I used are:
+\begin{itemize}
+    \item \texttt{av}: (150.0.0) the library used to extract the motion vectors from the video.
+    \item \texttt{albumentations}: it's used to apply the augmentation on the training and trying to mitigate the overfitting.
+    \item \texttt{open-cv}: used for the image and video processing.
+    \item \texttt{pytest}: used to do the tests 
+    \item \texttt{torch}: used for the training of the network and as for the face detection tool. 
+\end{itemize}
+
+
+\subsection{RunPod}
+Since the training on my laptop were slow I decided to use cloud platform to train it. I used a Pod on RunPod where using a \texttt{ssh} connection I uploaded the preprocessed dataset and the code from github, set the enviroment by the \texttt{setup.py} file and train the network. 
+
+I used an image with Pytorch and Cuda pre-installed and a GPU a NVIDIA RTX4090.
 
 \section{Results}
+The results of the project were not to have a useful network but to implement the paper, implement the preprocessing for the videos and set a pipeline to train the network, of course to have a good final result I would need more resources. The goal od the project were not to train a model but to understand the preprocessing of the video without considering AI, and I can say I am proud of the job.
+
+\section{Future works}
+Since the final results are not really relevant a future work could be training the model on the whole FaceForentics dataset, using more computations on RunPod. Another problem of this project is YuNet which even if it's less expensive than MTCNN it's still the bottleneck of the project, so a even lighter model (or solution without AI) could be explored.
 
 
 \end{document}

@@ -14,29 +14,28 @@ def compute_features_frame(
     mantiene im come maschera binaria, e restituisce un tensor
     shape (H, W, 3).
     """
-    # Creiamo una maschera booleana per i blocchi inter-coded
+    # create a boolean mask where inter-coded pixels are True
     mask = (im == 0)
 
-    # Estraiamo solo i valori inter-coded
+    # Extract only inter-coded motion vectors
     mvx_vals = mv_x[mask]
     mvy_vals = mv_y[mask]
 
-    # Calcoliamo media e std solo su quei valori
+    # Calculate mean and stddev for inter-coded pixels
     mean_x = mvx_vals.mean() if mvx_vals.size else 0.0
     std_x  = mvx_vals.std()  if mvx_vals.size else 1.0
     mean_y = mvy_vals.mean() if mvy_vals.size else 0.0
     std_y  = mvy_vals.std()  if mvy_vals.size else 1.0
 
-    # Standardizziamo l'intera mappa, ma la scala è determinata
-    # solo su mask=True
+    # Standardization only on inter-coded pixels
     mv_x_std = (mv_x - mean_x) / (std_x + 1e-6)
     mv_y_std = (mv_y - mean_y) / (std_y + 1e-6)
 
-    # Rimettiamo a zero i pixel non-inter (opzionale, ma per chiarezza)
+    # Set to zero the pixels that are not inter-coded
     mv_x_std[~mask] = 0.0
     mv_y_std[~mask] = 0.0
 
-    # Impiliamo i tre canali (due MV + IM)
+    # Stack the three channels
     features = np.stack((mv_x_std, mv_y_std, im.astype(np.float32)), axis=-1)
     return torch.from_numpy(features)  # dtype=torch.float32
 

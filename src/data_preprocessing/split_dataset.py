@@ -43,7 +43,7 @@ if __name__ == "__main__":
         "test":  test_data
     }
 
-    # 4) Salva su file JSON
+    # Salva su file JSON
     with open(json_filepath, "w") as f:
         json.dump(splits, f, indent=2)
 

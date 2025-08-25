@@ -108,15 +108,14 @@ def pipeline(models_dir = "../../models", temp_dir = "../../temp", video_path = 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = nw.MLP(in_channels=3)
 
-    # carica i pesi salvati nel training
+    # Upload the model
     state = torch.load(classifier_model_path, map_location=device)
     model.load_state_dict(state)
 
-    # 3. Porta su GPU se disponibile
     model = model.to(device)
     model.eval()
     
-    # 4. Prepara i tensori
+    # Prepare the tensors
     imgs_tensor = torch.stack([
         torch.from_numpy(face.image).permute(2,0,1).float().div(255.0)
         for face in video_faces if face is not None
@@ -176,12 +175,12 @@ def load_video_data(video_dir: str, label: int, augment_fn=None):
         - mv_tensor:  [N,3,H,W] float32
         - label_tensor: torch.tensor([label], dtype=torch.float32) shape [1]
     """
-    # 1) Load MV+IM features
+    # Load MV+IM features
     tensor_path = os.path.join(video_dir, "tensors.pt")
     features = torch.load(tensor_path)["features"]        # [N,H,W,3]
     mv_tensor = features.permute(0, 3, 1, 2).float()      # [N,3,H,W]
 
-    # 2) Load cropped face images (RGB -> float32 [0,1])
+    # Load cropped face images (RGB -> float32 [0,1])
     faces_dir = os.path.join(video_dir, "faces")
     img_files = sorted(os.listdir(faces_dir))
     imgs = []
@@ -192,7 +191,7 @@ def load_video_data(video_dir: str, label: int, augment_fn=None):
         imgs.append(img)
     imgs_tensor = torch.stack(imgs, dim=0)                # [N,3,H,W]
 
-    # 3) Apply augmentation if provided
+    # Apply augmentation if provided
     if augment_fn is not None:
         aug_imgs, aug_mvs = [], []
         for i in range(imgs_tensor.size(0)):
@@ -202,7 +201,7 @@ def load_video_data(video_dir: str, label: int, augment_fn=None):
         imgs_tensor = torch.stack(aug_imgs, dim=0)
         mv_tensor   = torch.stack(aug_mvs,  dim=0)
 
-    # 4) Label sempre shape [1]
+    # Label sempre shape [1]
     label_tensor = torch.tensor([label], dtype=torch.float32)
 
     return (imgs_tensor, mv_tensor), label_tensor

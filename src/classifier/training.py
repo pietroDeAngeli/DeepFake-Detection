@@ -6,33 +6,15 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, Subset
 from tqdm import tqdm
-import cv2
 import numpy as np
+import albumentations as A
 
-import tools.tools as tools  # for loading video data
+import tools.tools as tools
+import classifier.network as nw
 
-# Try to import Albumentations; if missing, we will skip augmentations gracefully
-try:
-    import albumentations as A
-    _HAS_ALBU = True
-except Exception:
-    _HAS_ALBU = False
 
-import classifier.network as nw  # MLP wrapping two MobileNetV3_adaption branches
 
-# -----------------------------
-# Reproducibility
-# -----------------------------
-def set_seed(seed: int = 42):
-    """Set all relevant random seeds for reproducibility."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-
-# -----------------------------
 # Dataset with joint RGB + MV augmentations
-# -----------------------------
 class VideoDataset(Dataset):
     def __init__(self, entries, dataset_path, augment: bool = False):
         """
@@ -43,47 +25,27 @@ class VideoDataset(Dataset):
         """
         self.entries = entries
         self.dataset_path = dataset_path
-        self.augment = augment and _HAS_ALBU
+        self.augment = augment
+        self.augment_fn = self._apply_augs_one if self.augment else None
 
-        # Build augmentation pipelines (paper-style). If Albumentations is missing, keep None.
+        # Augmentation pipelines
         self.color_aug = None
         self.geom_aug  = None
         if self.augment:
-            # Color/noise/compression augmentations applied to RGB ONLY
-            # Ref: paper Section "Data Augmentation" (image compression, Gaussian noise/blur,
-            # RGB & HSV shifts, FancyPCA, RandomBrightnessContrast, Gray-scale). 
+            # Color/Noise/Compression applied to RGB only
             self.color_aug = A.Compose([
-                A.ImageCompression(quality_lower=35, quality_upper=95, p=0.25),
-                A.GaussNoise(var_limit=(5.0, 25.0), p=0.25),
-                A.GaussianBlur(blur_limit=(3, 5), p=0.20),
                 A.RGBShift(r_shift_limit=10, g_shift_limit=10, b_shift_limit=10, p=0.20),
                 A.HueSaturationValue(hue_shift_limit=8, sat_shift_limit=15, val_shift_limit=10, p=0.20),
-                A.FancyPCA(alpha=0.1, p=0.15),
                 A.RandomBrightnessContrast(brightness_limit=0.15, contrast_limit=0.15, p=0.25),
-                A.ToGray(p=0.10),
             ])
 
-            # Geometry/GridMask applied to BOTH RGB and MV/IM (must be identical & synchronized)
-            # We use ReplayCompose so we can read which flips were applied to mirror MV signs.
+            # Geometric Augmentations applied to BOTH RGB and MV
             self.geom_aug = A.ReplayCompose(
                 [
                     A.HorizontalFlip(p=0.5),
-                    A.VerticalFlip(p=0.2),
-                    # Use GridDropout as GridMask proxy: zero-out patches on a grid over the input.
-                    A.GridDropout(
-                        ratio=0.5,         # fraction of dropped area
-                        random_offset=True,
-                        holes_number_x=None,
-                        holes_number_y=None,
-                        unit_size_min=32,  # choose sensible cell size for 224x224
-                        unit_size_max=64,
-                        p=0.20
-                    ),
                 ],
                 additional_targets={'mv': 'image'}  # ensure identical spatial ops for MV/IM
             )
-        elif augment and not _HAS_ALBU:
-            print("[Warn] Albumentations not installed. Augmentations are disabled.")
 
     def __len__(self):
         return len(self.entries)
@@ -97,43 +59,34 @@ class VideoDataset(Dataset):
         """
         if (self.color_aug is None and self.geom_aug is None):
             return img_t, mv_t
+        
+        device = img_t.device
 
-        # Convert to HWC numpy (Albumentations expects uint8 or float HWC)
+        # Convert to CPU numpy (For Albumentations)
         img_hwc = img_t.permute(1, 2, 0).cpu().numpy()
         mv_hwc  = mv_t.permute(1, 2, 0).cpu().numpy()
 
-        # 1) Geometry & GridMask on BOTH (keep transforms replay to infer flips)
+        # Geometry augmentations
         if self.geom_aug is not None:
             out = self.geom_aug(image=img_hwc, mv=mv_hwc)
             img_hwc = out["image"]
             mv_hwc  = out["mv"]
             replay  = out["replay"]
 
-            # Mirror MV components according to flips applied:
-            # - Horizontal flip: invert x-component
-            # - Vertical flip:   invert y-component
+            # Manual MV adjustments for HorizontalFlip
             for t in replay["transforms"]:
-                if not t.get("applied", False):
-                    continue
-                name = t.get("__class_fullname__", "")
-                if name.endswith("HorizontalFlip"):
-                    mv_hwc[:, :, 0] = -mv_hwc[:, :, 0]  # mv_x -> -mv_x
-                if name.endswith("VerticalFlip"):
-                    mv_hwc[:, :, 1] = -mv_hwc[:, :, 1]  # mv_y -> -mv_y
+                if t.get("applied", False):
+                    name = t.get("__class_fullname__", "")
+                    if name.endswith("HorizontalFlip"):
+                        mv_hwc[:, :, 0] = -mv_hwc[:, :, 0]
 
-        # 2) Color/noise/compression on RGB ONLY
+        # RGB augmentations
         if self.color_aug is not None:
             img_hwc = self.color_aug(image=img_hwc)["image"]
 
-        # Ensure shape consistency (ToGray may produce single channel → expand back to 3)
-        if img_hwc.ndim == 2:
-            img_hwc = np.expand_dims(img_hwc, 2)
-        if img_hwc.shape[2] == 1:
-            img_hwc = np.repeat(img_hwc, 3, axis=2)
-
         # Back to CHW tensors
-        img_out = torch.from_numpy(img_hwc).permute(2, 0, 1).float().clamp(0.0, 1.0)
-        mv_out  = torch.from_numpy(mv_hwc).permute(2, 0, 1).float()
+        img_out = torch.from_numpy(img_hwc).permute(2, 0, 1).float().clamp(0.0, 1.0).to(device)
+        mv_out  = torch.from_numpy(mv_hwc).permute(2, 0, 1).float().to(device)
 
         return img_out, mv_out
 
@@ -144,11 +97,9 @@ class VideoDataset(Dataset):
 
         return tools.load_video_data(video_dir, label, augment_fn=self.augment_fn)
 
-# -----------------------------
-# Train / Eval
-# -----------------------------
+
 def evaluate(model, loader, device, criterion):
-    """Evaluate average BCE loss on the given loader (no augmentation)."""
+    """Evaluate average BCE loss on the given loader"""
     model.eval()
     total_loss = 0.0
     with torch.no_grad():
@@ -162,7 +113,7 @@ def evaluate(model, loader, device, criterion):
     return total_loss / max(1, len(loader))
 
 def train_one_epoch(model, loader, device, criterion, optimizer, desc="Train"):
-    """Train for one epoch and return average loss."""
+    """Train for one epoch and return average loss"""
     model.train()
     running = 0.0
     for (imgs, mvs), label in tqdm(loader, desc=desc, leave=False):
@@ -178,20 +129,17 @@ def train_one_epoch(model, loader, device, criterion, optimizer, desc="Train"):
         running += loss.item()
     return running / max(1, len(loader))
 
-# -----------------------------
-# Main: single split (fixed val = 10%) + 2 phases (freeze -> unfreeze)
-# -----------------------------
-if __name__ == "__main__":
-    set_seed(42)
 
-    dataset_path  = "../../dataset"
+if __name__ == "__main__":
+
+    dataset_path  = "../../../dataset"
     manifest_path = os.path.join(dataset_path, "manifest.json")
 
     with open(manifest_path, "r") as f:
         manifest = json.load(f)
     all_entries = manifest["train"]
 
-    # Fixed 90/10 split
+    # 90/10 split
     rng = np.random.default_rng(42)
     idx_all = np.arange(len(all_entries))
     rng.shuffle(idx_all)
@@ -199,7 +147,7 @@ if __name__ == "__main__":
     val_idx  = idx_all[:val_size]
     train_idx= idx_all[val_size:]
 
-    # Datasets: train with augmentations, val without
+    # Datasets creation
     full_train = VideoDataset(all_entries, dataset_path, augment=True)
     full_val   = VideoDataset(all_entries, dataset_path, augment=False)
     train_ds   = Subset(full_train, train_idx)
@@ -207,7 +155,7 @@ if __name__ == "__main__":
 
     # Config
     epochs          = 30
-    warmup_epochs   = 5          # phase 1: freeze backbone
+    warmup_epochs   = 5 # Backbone frozen for first N epochs
     lr_head_phase1  = 1e-3
     lr_all_phase2   = 1e-4
     num_workers     = 0
@@ -222,14 +170,14 @@ if __name__ == "__main__":
     val_loader   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False,
                               num_workers=num_workers, pin_memory=(device.type=="cuda"))
 
-    # Model returns logits; your implementation separates backbone/head
-    model     = nw.MLP(in_channels=3).to(device)  # two MobileNetV3_adaption branches
+    # Model, criterion, optimizer
+    model     = nw.MLP(in_channels=3).to(device)
     criterion = nn.BCEWithLogitsLoss()
-
-    # ---- Phase 1: freeze backbones, train adapters+head+alpha
-    model.freeze_backbones(bn_eval=True)  # set both backbones to eval and no-grad
     optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=lr_head_phase1)
 
+    # Frozen backbones, train head only
+    model.freeze_backbones(bn_eval=True)  # set both backbones to eval and no-grad
+    
     train_losses, val_losses = [], []
     best_val = math.inf
     best_ep  = -1
@@ -239,7 +187,7 @@ if __name__ == "__main__":
     unfrozen = False
 
     for ep in range(1, epochs + 1):
-        # Switch to phase 2: unfreeze backbones and use lower LR
+        # Unfreeze backbones after warmup and change LR
         if (not unfrozen) and (ep > warmup_epochs):
             model.unfreeze_backbones()
             optimizer = torch.optim.Adam([p for p in model.parameters() if p.requires_grad], lr=lr_all_phase2)

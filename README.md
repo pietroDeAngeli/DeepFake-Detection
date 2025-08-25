@@ -1,21 +1,83 @@
-# DeepFake-Detection (In progress)
+# DeepFake Detection
 
-On this repo there is a University project about the course of Signal, Image and Video where a constraint was to build a project where AI is just a narrow task and not the whole implementation of the project. I will just use AI as a comparison with traditional techniques of video processing. 
+This repository contains a University project for the course **Signal, Image and Video Processing**.  
+The main constraint of the project was to design a pipeline where **AI is only a narrow task** and not the whole implementation.  
+Here, AI is used as a **classifier** on top of traditional video processing features.
 
-## About the project
-The project will implement the paper "Efficient Temporally-Aware DeepFake Detection using H.264 Motion Vectors" that proposes to detect DeepFakes using *motion vectors* instead of *Optical flow* techniques, that are more precise but the computational complexity is much higher. Thanks to the low complexity this approach can be used in embedded systems with low computational power. 
+---
 
-## Dataset
-The used dataset is a subset of 200 videos from the **FaceForensics++** found on Kaggle at link: [https://www.kaggle.com/datasets/hungle3401/faceforensics?resource=download](https://www.kaggle.com/datasets/hungle3401/faceforensics?resource=download).
+## 📄 About the Project
+The implementation is based on the paper:
 
-## Pipeline
+> *Efficient Temporally-Aware DeepFake Detection using H.264 Motion Vectors*  
 
-1. **Dataset Setup**: Videos are split into `real/` and `fake/` directories. They are optionally transcoded into a format suitable for H.264 MV extraction.
-2. **Face Detection**: We use YuNet to detect and crop the largest face from each frame, resized to 224x224 pixels.
-3. **Motion Vector Extraction**: Using PyAV, we extract 16x16 block-level MVs and Information Masks from H.264 encoded videos.
-4. **Feature Extraction**: For each frame, compute statistical features from the MV map: mean, variance.
+The core idea is to detect DeepFakes using **H.264 motion vectors (MVs)** instead of **optical flow**.  
+While optical flow is more precise, it is also computationally expensive. Motion vectors, being a byproduct of H.264 encoding, are extremely efficient to compute, making this approach suitable for **embedded systems with limited computational resources**.
 
-I will develop soon the Classifier as described in the paper. 
+---
 
-## Notes
-- The MVs are less precise than Optical Flow but extremely efficient to compute.
+## 📂 Dataset
+We use a subset of **200 videos** from the [FaceForensics++ dataset](https://www.kaggle.com/datasets/hungle3401/faceforensics?resource=download).  
+
+The dataset is split into `real/` and `fake/` directories. Each video is processed to extract both:
+- **Cropped face frames** (via YuNet detector, resized to 224x224).
+- **Motion vectors (MVs) and Information Masks (IMs)** from H.264 streams.
+
+---
+
+## 🔄 Pipeline
+
+1. **Dataset Setup**  
+   Videos are organized into `real/` and `fake/` and preprocessed for MV extraction.
+
+2. **Face Detection**  
+   Using **YuNet**, the largest face per frame is cropped and resized to 224×224.
+
+3. **Motion Vector Extraction**  
+   With **PyAV**, block-level motion vectors (16×16 macroblocks) and Information Masks are extracted from H.264 encoded videos.
+
+4. **Feature Computation**  
+   MV + IM features are normalized and stored along with the cropped face images.
+
+5. **Classification**  
+   A **two-stream MobileNetV3-based architecture** is trained:
+   - One branch for RGB face frames.  
+   - One branch for motion vectors (MV + IM).  
+   - Outputs are fused with a weighted sum (learnable `α`) to predict Real vs Fake.
+
+6. **Training Strategy**  
+   - **Phase 1:** Backbone frozen, only classifier head is trained.  
+   - **Phase 2:** Entire network is unfrozen and fine-tuned with a smaller learning rate.  
+   - Augmentations include **color changes** and **horizontal flips** (as in the paper).
+
+7. **Evaluation**  
+   The model is evaluated with **accuracy, loss, confusion matrix, precision, recall, F1 score**.
+
+---
+
+## 🧪 Results
+- Motion vectors provide a cheaper but effective alternative to optical flow.  
+- Data augmentation improves robustness to color/lighting variations.  
+- The two-stream fusion (RGB + MV) achieves better generalization than single-stream models.  
+
+Artifacts produced during training/evaluation include:
+- `best_model.pth` (weights of the best checkpoint).  
+- `metrics.json` (accuracy, loss, precision, recall, F1).  
+- `confusion_matrix.png` and `.csv`.
+
+---
+
+## ⚙️ Requirements
+- Python 3.10+  
+- PyTorch  
+- OpenCV (`cv2`)  
+- PyAV  
+- Albumentations  
+- Matplotlib, Seaborn, Pandas  
+
+Install with:
+```bash
+pip install .
+```
+
+From the main directory.

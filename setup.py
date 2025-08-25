@@ -16,6 +16,7 @@ setup(
         "tqdm==4.67.1",
         "opencv-python==4.12.0.88",
         "albumentations",
+        "PyQt6"
         #"mtcnn",
         #"tensorflow==2.19.0",
         #"opencv-python-headless>=4.5.5",

@@ -8,14 +8,12 @@ from PyQt6.QtWidgets import (
     QFrame
 )
 
-import tools.tools as tools  # pipeline e dataclass Result
+import tools.tools as tools
 
 
-# -----------------------------
-# Worker che gira in thread separato
-# -----------------------------
+# This will run the pipeline in a separate thread
 class PipelineWorker(QObject):
-    finished = pyqtSignal(object)   # emette tools.Result
+    finished = pyqtSignal(object)
     failed   = pyqtSignal(str)
 
     def __init__(self, file_path: str):
@@ -36,10 +34,9 @@ class PipelineWorker(QObject):
         except Exception as e:
             self.failed.emit(str(e))
 
+# UI pages
+# -----------------------------
 
-# -----------------------------
-# Upload Page
-# -----------------------------
 class UploadPage(QWidget):
     fileSelected = pyqtSignal(str)
     detectClicked = pyqtSignal()
@@ -113,9 +110,6 @@ class UploadPage(QWidget):
             self.set_file(local)
 
 
-# -----------------------------
-# Progress Page con spinner
-# -----------------------------
 class ProgressPage(QWidget):
     def __init__(self):
         super().__init__()
@@ -144,7 +138,7 @@ class ProgressPage(QWidget):
     def update_loading_text(self):
         self._dot_count = (self._dot_count + 1) % 4
         dots = "." * self._dot_count
-        spaces = " " * (3 - self._dot_count)  # per mantenere la larghezza
+        spaces = " " * (3 - self._dot_count)
         self.loading_label.setText(f"Loading{dots}{spaces}")
 
     def reset(self):
@@ -153,12 +147,9 @@ class ProgressPage(QWidget):
 
     def stop(self):
         self.timer.stop()
-        self.loading_label.setText("Done   ")  # mantieni la stessa larghezza
+        self.loading_label.setText("Done   ")
 
 
-# -----------------------------
-# Result Page
-# -----------------------------
 class ResultPage(QWidget):
     goBack = pyqtSignal()
 
@@ -220,9 +211,6 @@ class ResultPage(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(self.temp_dir))
 
 
-# -----------------------------
-# Main Window
-# -----------------------------
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -293,9 +281,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(0)
 
 
-# -----------------------------
 # Entry point
-# -----------------------------
 def main():
     app = QApplication(sys.argv)
     w = MainWindow()

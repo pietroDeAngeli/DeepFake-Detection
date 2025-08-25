@@ -31,7 +31,7 @@ class MLP(nn.Module):
 
         return out
     
-    # --- SOLO BACKBONES (comodo per fine-tuning in 2 fasi) ---
+    # freeze/unfreeze the backbones of the two branches
     def freeze_backbones(self, bn_eval: bool = True):
         _set_requires_grad(self.rgb_mlp.backbone, False)
         _set_requires_grad(self.mv_mlp.backbone,  False)

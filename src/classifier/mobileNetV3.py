@@ -6,10 +6,10 @@ class MobileNetV3_adaption(nn.Module):
     def __init__(self, in_channels: int = 3):
         super().__init__()
 
-        # 1) Backbone pretrained
+        # Backbone pretrained
         base = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.DEFAULT)
 
-        # 2) Adapter d’ingresso (conv iniziale custom)
+        # Adapt input conv to in_channels
         orig_conv = base.features[0][0]
         self.input_adapter = nn.Conv2d(
             in_channels,
@@ -23,35 +23,35 @@ class MobileNetV3_adaption(nn.Module):
         if self.input_adapter.bias is not None:
             nn.init.zeros_(self.input_adapter.bias)
 
-        # Rimuovi solo la conv, lasciando BN+attivazione del primo blocco
+        # Revove original conv from the model
         base.features[0][0] = nn.Identity()
 
-        # 3) Separa backbone e head
+        # Separate backbone and head
         self.backbone = base.features
         self.pool     = base.avgpool
         in_features   = base.classifier[0].in_features  # 576 per v3-small torchvision
 
         self.head = nn.Linear(in_features, 1)
 
-        # Flag per gestione freeze BN
+        # Freeze flag
         self._backbone_frozen = False
 
     def forward(self, x: torch.Tensor):
-        # x: [N, C, H, W] (N = #frame del video)
+        # x: [N, C, H, W] (N = #video frames)
         x = self.input_adapter(x)
         feats = self.backbone(x)
         feats = self.pool(feats).flatten(1)     # [N, in_features]
         logits = self.head(feats)               # [N, 1]
-        video_logit = logits.mean(dim=0)        # [1] media sui frame
-        return video_logit  # <-- logits (niente sigmoid qui)
+        video_logit = logits.mean(dim=0)        # [1] average pooling over frames
+        return video_logit 
 
-    # ----- utilità freeze/unfreeze -----
+    # Freezing/unfreezing the backbone
     def freeze_backbone(self, bn_eval: bool = True):
         for p in self.backbone.parameters():
             p.requires_grad = False
         self._backbone_frozen = True
         if bn_eval:
-            self.backbone.eval()  # non aggiornare running stats dei BN
+            self.backbone.eval()
 
     def unfreeze_backbone(self):
         for p in self.backbone.parameters():

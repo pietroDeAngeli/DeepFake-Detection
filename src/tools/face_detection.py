@@ -47,21 +47,21 @@ def make_square_box(x: int, y: int, w: int, h: int, img_w: int, img_h: int) -> t
     Returns:
         (new_x, new_y, side): top-left corner and side length of the square box.
     """
-    # 1) choose the square side so it covers the original box,
+    # choose the square side so it covers the original box,
     #    but never larger than the bigger image dimension
     side = max(w, h)
     max_img_side = max(img_w, img_h)
     side = min(side, max_img_side)
 
-    # 2) compute the original box center
+    # compute the original box center
     cx = x + w // 2
     cy = y + h // 2
 
-    # 3) center the square on the box center
+    # center the square on the box center
     new_x = cx - side // 2
     new_y = cy - side // 2
 
-    # 4) clamp into valid image coords
+    # clamp into valid image coords
     new_x = max(0, min(new_x, img_w - side))
     new_y = max(0, min(new_y, img_h - side))
 
@@ -114,7 +114,7 @@ def face_frame_extractor(
     if biggest is None:
         return None
 
-    # 5. Crop, resize, and pack result
+    # Crop, resize, and pack result
     x, y, width, height = biggest["box"]
 
     # Make bounding box square

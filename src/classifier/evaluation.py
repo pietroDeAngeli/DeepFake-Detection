@@ -1,20 +1,20 @@
-# evaluation.py
 import os
 import json
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+import cv2
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
 
-import classifier.network as nw  # your two-stream MLP
-import tools.tools as tools  # for loading video data
+import classifier.network as nw
+import tools.tools as tools
+
 
 class VideoDataset(Dataset):
     def __init__(self, entries, dataset_path):
-        """
-        entries: list of dicts with keys {"video": <id>, "label": 0/1}
-        dataset_path: root folder containing one subfolder per video
-        """
         self.entries = entries
         self.dataset_path = dataset_path
 
@@ -28,13 +28,11 @@ class VideoDataset(Dataset):
 
         return tools.load_video_data(video_dir, label, augment_fn=None)
 
+
 @torch.no_grad()
-def evaluate(model, dataloader, device):
-    """
-    Minimal evaluation: returns accuracy, avg BCE loss, and confusion matrix counts.
-    """
+def evaluate(model, dataloader, device, out_dir="eval_results"):
     model.eval()
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()
 
     total = 0
     correct = 0
@@ -42,17 +40,21 @@ def evaluate(model, dataloader, device):
 
     tp = tn = fp = fn = 0
 
+    all_labels = []
+    all_preds = []
+
     for (imgs, mvs), label in tqdm(dataloader, desc="Evaluating"):
-        # unpack batch size 1: [1,N,3,H,W] -> [N,3,H,W]
         imgs  = imgs[0].to(device)
         mvs   = mvs[0].to(device)
-        label = label.to(device).view(-1)   # [1], float32 0/1
+        label = label.to(device).view(-1)   # [1]
 
-        prob = model((imgs, mvs))           # [1], sigmoid already in your model
-        loss = criterion(prob, label)
+        logits = model((imgs, mvs))         # [1]
+        loss   = criterion(logits, label)
         loss_sum += loss.item()
 
-        pred = (prob >= 0.5).float()        # threshold @ 0.5
+        prob = torch.sigmoid(logits)
+        pred = (prob >= 0.5).float()
+
         correct += (pred == label).sum().item()
         total += 1
 
@@ -64,33 +66,65 @@ def evaluate(model, dataloader, device):
         elif y == 0 and p == 1: fp += 1
         elif y == 1 and p == 0: fn += 1
 
+        all_labels.append(y)
+        all_preds.append(p)
+
     acc = correct / total if total > 0 else 0.0
     avg_loss = loss_sum / total if total > 0 else 0.0
-    return acc, avg_loss, {"tp": tp, "tn": tn, "fp": fp, "fn": fn, "total": total}
+
+    metrics = {
+        "accuracy": acc,
+        "loss": avg_loss,
+        "tp": tp, "tn": tn, "fp": fp, "fn": fn, "total": total
+    }
+
+    # Save results
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Confusion matrix as heatmap
+    cm = [[tn, fp],
+          [fn, tp]]
+    df_cm = pd.DataFrame(cm, index=["Real (0)", "Fake (1)"], columns=["Pred Real", "Pred Fake"])
+    plt.figure(figsize=(5,4))
+    sns.heatmap(df_cm, annot=True, fmt="d", cmap="Blues")
+    plt.title("Confusion Matrix")
+    plt.ylabel("True label")
+    plt.xlabel("Predicted label")
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "confusion_matrix.png"))
+    plt.close()
+
+    # Save raw confusion matrix
+    df_cm.to_csv(os.path.join(out_dir, "confusion_matrix.csv"))
+
+    # Save metrics
+    with open(os.path.join(out_dir, "metrics.json"), "w") as f:
+        json.dump(metrics, f, indent=2)
+
+    return metrics
+
 
 if __name__ == "__main__":
-    # Paths (adjust as needed)
     dataset_path  = "../../../dataset"
     manifest_path = os.path.join(dataset_path, "manifest.json")
-    checkpoint    = "mlp_best.pth"  # path to your trained model
+    checkpoint    = "best_model.pth"
 
-    # Load test split
     with open(manifest_path, "r") as f:
         manifest = json.load(f)
     test_entries = manifest["test"]
 
-    # DataLoader
     test_ds     = VideoDataset(test_entries, dataset_path)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False, num_workers=4, pin_memory=True)
 
-    # Model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model  = nw.MLP(in_channels=3).to(device)
     model.load_state_dict(torch.load(checkpoint, map_location=device))
 
-    # Run eval
-    acc, avg_loss, cm = evaluate(model, test_loader, device)
+    metrics = evaluate(model, test_loader, device)
 
-    print(f"\nTest Accuracy: {acc*100:.2f}%")
-    print(f"Avg BCE Loss:  {avg_loss:.4f}")
-    print(f"Confusion Matrix counts: {cm}")
+    print("\nEvaluation Results:")
+    for k, v in metrics.items():
+        if isinstance(v, float):
+            print(f"{k}: {v:.4f}")
+        else:
+            print(f"{k}: {v}")

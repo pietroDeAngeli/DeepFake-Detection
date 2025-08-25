@@ -58,7 +58,7 @@ def extract_motion_vectors_and_im(
     results = []
 
     for frame, face in zip(frames, faces):
-        # 1) I-frames → no temporal info → all zeros
+        # I-frames, all zeros
         if frame.pict_type == 0:
             mvx = np.zeros((out_res, out_res), dtype=np.float32)
             mvy = np.zeros((out_res, out_res), dtype=np.float32)
@@ -66,7 +66,7 @@ def extract_motion_vectors_and_im(
             results.append((mvx, mvy, im))
             continue
 
-        # 3) Grab motion-vectors in one call
+        # Grab motion-vectors in one call
         mv_data = frame.side_data.get(Type.MOTION_VECTORS)
         if mv_data is None:
             # Sometimes they could be labelled incorrectly
@@ -78,13 +78,13 @@ def extract_motion_vectors_and_im(
             continue
         mv_list = mv_data  # iterable of dicts
 
-        # 4) Prepare per-pixel face-crop maps so partial macroblocks keep correct size
-        N = face.side  # may not be divisible by mb_size
+        # Prepare per-pixel face-crop maps so partial macroblocks keep correct size
+        N = face.side
         mvx_crop = np.zeros((N, N), dtype=np.float32)
         mvy_crop = np.zeros((N, N), dtype=np.float32)
         im_crop  = np.ones ((N, N), dtype=np.uint8)  # 1 = intra-coded
 
-        # 5) Fill each macroblock region in the pixel map
+        # Fill each macroblock region in the pixel map
         for mv in mv_list:
             # map absolute dst coords → coords relative to face crop
             rel_x = mv.dst_x - face.x
@@ -115,7 +115,7 @@ def extract_motion_vectors_and_im(
             # mark this block as inter-coded (has MV)
             im_crop [y0:y1, x0:x1] = 0
 
-        # 6) Upsample crop maps to fixed network input resolution
+        # Upsample crop maps to fixed network input resolution
         mvx = cv2.resize(mvx_crop, (out_res, out_res), interpolation=cv2.INTER_LINEAR)
         mvy = cv2.resize(mvy_crop, (out_res, out_res), interpolation=cv2.INTER_LINEAR)
         im  = cv2.resize(im_crop , (out_res, out_res), interpolation=cv2.INTER_NEAREST)
