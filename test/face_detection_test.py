@@ -35,7 +35,7 @@ def test_make_square_box(x, y, w, h, img_w, img_h):
     assert side > 0, "side length must be positive"
 
 # --- TEST: extract_frames_with_faces produces correct types ---
-def test_extract_frames_with_faces(detector, tmp_path):
+def test_extract_frames_with_faces(detector):
     video_path = os.path.abspath(
         os.path.join(os.path.dirname(__file__), 'input2.mp4')
     )

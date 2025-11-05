@@ -35,6 +35,10 @@ if __name__ == "__main__":
         # Detect faces
         results = faceDetection.extract_frames_with_faces(detector, video_path, unique_frames=True)
 
+        if results is None or len(results) == 0:
+            print(f"\nWarning: No faces detected in {video_path}. Skipping video.")
+            continue
+
         frames, faces = zip(*results)
         frames = list(frames)
         video_faces  = list(faces)
@@ -52,6 +56,10 @@ if __name__ == "__main__":
 
         # Filter I-frames and None values
         results = [res for res in results if res is not None]
+
+        if not results:
+            print(f"\nWarning: No valid MV frames found after filtering for {video_path}. Skipping.")
+            continue # Salta se non ci sono MV utili
 
         # Extract data
         mv_x, mv_y, ims = zip(*results)
