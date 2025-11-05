@@ -37,7 +37,7 @@ def extract_motion_vectors_and_im(
     faces: list[FaceBox | None],
     mb_size: int = 16,
     out_res: int = 224
-) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray] | None]:
     """
     Extract per-frame motion-vector maps (mvx, mvy) and information mask (im)
     from decoded frames and corresponding face boxes, correctly handling
@@ -60,21 +60,22 @@ def extract_motion_vectors_and_im(
     for frame, face in zip(frames, faces):
         # I-frames, all zeros
         if frame.pict_type == 0:
-            mvx = np.zeros((out_res, out_res), dtype=np.float32)
-            mvy = np.zeros((out_res, out_res), dtype=np.float32)
-            im  = np.zeros((out_res, out_res), dtype=np.uint8)
-            results.append((mvx, mvy, im))
+            #mvx = np.zeros((out_res, out_res), dtype=np.float32)
+            #mvy = np.zeros((out_res, out_res), dtype=np.float32)
+            #im  = np.zeros((out_res, out_res), dtype=np.uint8)
+            #results.append((mvx, mvy, im))
+            results.append(None)
             continue
 
         # Grab motion-vectors in one call
         mv_data = frame.side_data.get(Type.MOTION_VECTORS)
         if mv_data is None:
             # Sometimes they could be labelled incorrectly
-            mvx = np.zeros((out_res, out_res), dtype=np.float32)
-            mvy = np.zeros((out_res, out_res), dtype=np.float32)
-            im  = np.zeros((out_res, out_res), dtype=np.uint8)
-            results.append((mvx, mvy, im))
-            print("Labelled incorrectly")
+            #mvx = np.zeros((out_res, out_res), dtype=np.float32)
+            #mvy = np.zeros((out_res, out_res), dtype=np.float32)
+            #im  = np.zeros((out_res, out_res), dtype=np.uint8)
+            #results.append((mvx, mvy, im))
+            results.append(None)
             continue
         mv_list = mv_data  # iterable of dicts
 

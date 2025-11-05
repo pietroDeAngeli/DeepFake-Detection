@@ -6,9 +6,14 @@ temp/
 *.mp4
 *.jpg
 *.json
+*.pptx
+*.zip
+*.pptx
+*.txt
 **/__pycache__
 **/deepfake_tools.egg-info
 **/dataset
+
 
 
 

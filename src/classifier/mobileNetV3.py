@@ -56,8 +56,11 @@ class MobileNetV3_adaption(nn.Module):
     def unfreeze_backbone(self):
         for p in self.backbone.parameters():
             p.requires_grad = True
+
+        for _, module in self.backbone.named_modules():
+            if isinstance(module, nn.BatchNorm2d):
+                module.eval()
         self._backbone_frozen = False
-        self.backbone.train()
 
     def trainable_head_params(self):
         return list(self.input_adapter.parameters()) + list(self.head.parameters())

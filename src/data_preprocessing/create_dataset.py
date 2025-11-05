@@ -13,10 +13,10 @@ import tools.feature_computation as featureComputation
 
 if __name__ == "__main__":
 
-    fake_dir = "../FF++/fake"
-    real_dir = "../FF++/real"
-    model_path = "../models/face_detection_yunet_2023mar.onnx"
-    out_dir = "../dataset"
+    fake_dir = "../../FF++_complete/test"
+    real_dir = "../../FF++/real"
+    model_path = "../../models/face_detection_yunet_2023mar.onnx"
+    out_dir = "../../dataset2"
     
     #label = True  # Set to True for real videos, False for fake videos
     label = False
@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
         frames, faces = zip(*results)
         frames = list(frames)
-        video_faces  = list(faces)        
+        video_faces  = list(faces)
 
         # Extract data
         face_boxes = [ 
@@ -49,6 +49,9 @@ if __name__ == "__main__":
         results = motionVectos.extract_motion_vectors_and_im(
             frames, face_boxes
         )
+
+        # Filter I-frames and None values
+        results = [res for res in results if res is not None]
 
         # Extract data
         mv_x, mv_y, ims = zip(*results)

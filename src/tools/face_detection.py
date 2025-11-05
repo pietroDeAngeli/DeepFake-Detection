@@ -22,7 +22,6 @@ def initialize_detector(model_path:str) -> cv2.FaceDetectorYN:
     Returns:
         MTCNN: An instance of the MTCNN face detector.
     """
-    #detector = MTCNN(device="cpu") # MTCNN model initialization
 
     detector = cv2.FaceDetectorYN.create(
         model=model_path,
@@ -171,7 +170,11 @@ def random_frame_extractor(detector: cv2.FaceDetectorYN,
         # Decode a window of frames after the keyframe and collect P/B frames
         candidates: list[av.video.frame.VideoFrame] = []
         for frame in container.decode(video=0):
-
+            
+            # If I-frame we skip
+            if frame.pict_type == 0:
+                continue
+            
             candidates.append(frame)
             
             if len(candidates) >= window_size:
@@ -199,10 +202,21 @@ def random_frame_extractor(detector: cv2.FaceDetectorYN,
 
 
 def unique_frame_extractor(detector: cv2.FaceDetectorYN,
-                              video_path: str,
-                              n_frames: int
-                              ):
-    
+                           video_path: str,
+                           n_frames: int
+                           ) -> list[tuple[av.video.frame.VideoFrame, Face]] | None:
+    """
+    Samples n_frames uniformly from the video using Reservoir Sampling, 
+    ensuring only P/B frames with detected faces are kept.
+
+    Parameters:
+        detector: An initialized cv2.FaceDetectorYN instance.
+        video_path (str): Path to the video file.
+        n_frames (int): Target number of frames to sample.
+
+    Returns:
+        list[tuple[av.video.frame.VideoFrame, Face]] | None: List of sampled frames and faces.
+    """
     container = av.open(video_path)
     stream = container.streams.video[0]
     stream.codec_context.options = {"flags2": "+export_mvs"}
@@ -211,22 +225,28 @@ def unique_frame_extractor(detector: cv2.FaceDetectorYN,
     count = 0
 
     for frame in container.decode(video=0):
-        count += 1
-        j = random.randrange(count)  # estrai indice casuale in [0..count-1]
-        if j < n_frames:
-            # solo ora chiamo il face detector
-            face = face_frame_extractor(detector=detector, frame=frame)
-            if face is None:
-                continue
+        
+        if frame.pict_type == 0:
+            continue
 
-            item = (frame, face)
-            if len(reservoir) < n_frames:
-                reservoir.append(item)
-            else:
+        count += 1 
+
+        face = face_frame_extractor(detector=detector, frame=frame)
+        if face is None:
+            continue
+
+        item = (frame, face)
+        
+        # Reservoir Sampling:
+        if len(reservoir) < n_frames:
+            reservoir.append(item)
+        else:
+            j = random.randrange(count) 
+            if j < n_frames:
                 reservoir[j] = item
 
     if not reservoir:
-        print(f"Warning: no faces found in {video_path}")
+        print(f"Warning: no faces found with useful MV frames in {video_path}")
         return None
 
     return reservoir

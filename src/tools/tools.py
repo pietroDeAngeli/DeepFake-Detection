@@ -40,8 +40,6 @@ def get_dir_videos(path):
 def pipeline(models_dir = "../../models", temp_dir = "../../temp", video_path = None) -> Result:
 
     total_start_time = time.time()
-
-    json_path = os.path.join(temp_dir, "result.json")
     
     # Models paths
     face_detection_model_path = os.path.join(models_dir, "face_detection_yunet_2023mar.onnx")
@@ -82,11 +80,11 @@ def pipeline(models_dir = "../../models", temp_dir = "../../temp", video_path = 
     results = motionVectors.extract_motion_vectors_and_im(
         frames, face_boxes
     )
+
     end_time = time.time()
     mv_time = end_time - time_start
 
-    # I chose to not save the motion vectors
-    #torch.save({"features": feature_matrix}, os.path.join(temp_dir, "tensors.pt"))
+    results = [res for res in results if res is not None]
 
     # Extract data
     mv_x, mv_y, ims = zip(*results)
@@ -122,6 +120,8 @@ def pipeline(models_dir = "../../models", temp_dir = "../../temp", video_path = 
     ], dim=0)  # [N,3,H,W]
 
     mv_tensor = feature_matrix.permute(0,3,1,2).float()  # [N,3,H,W]
+
+    imgs_tensor = (imgs_tensor - IMAGENET_MEAN) / IMAGENET_STD
 
     imgs_tensor = imgs_tensor.to(device)
     mv_tensor   = mv_tensor.to(device)
@@ -160,6 +160,10 @@ def pipeline(models_dir = "../../models", temp_dir = "../../temp", video_path = 
     )
 
 
+IMAGENET_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1) # [1, C, 1, 1] per broadcasting
+IMAGENET_STD  = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1) # [1, C, 1, 1] per broadcasting
+
+
 def load_video_data(video_dir: str, label: int, augment_fn=None):
     """
     Load one video sample: MV+IM tensors + face images + label.
@@ -191,6 +195,9 @@ def load_video_data(video_dir: str, label: int, augment_fn=None):
         imgs.append(img)
     imgs_tensor = torch.stack(imgs, dim=0)                # [N,3,H,W]
 
+    # Standardize RGB channel
+    imgs_tensor = (imgs_tensor - IMAGENET_MEAN) / IMAGENET_STD
+
     # Apply augmentation if provided
     if augment_fn is not None:
         aug_imgs, aug_mvs = [], []
@@ -205,6 +212,3 @@ def load_video_data(video_dir: str, label: int, augment_fn=None):
     label_tensor = torch.tensor([label], dtype=torch.float32)
 
     return (imgs_tensor, mv_tensor), label_tensor
-    
-
-

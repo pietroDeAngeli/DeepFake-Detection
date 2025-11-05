@@ -33,14 +33,9 @@ class MLP(nn.Module):
     
     # freeze/unfreeze the backbones of the two branches
     def freeze_backbones(self, bn_eval: bool = True):
-        _set_requires_grad(self.rgb_mlp.backbone, False)
-        _set_requires_grad(self.mv_mlp.backbone,  False)
-        if bn_eval:
-            self.rgb_mlp.backbone.eval()
-            self.mv_mlp.backbone.eval()
+        self.rgb_mlp.freeze_backbone(bn_eval=bn_eval)
+        self.mv_mlp.freeze_backbone(bn_eval=bn_eval)
 
     def unfreeze_backbones(self):
-        _set_requires_grad(self.rgb_mlp.backbone, True)
-        _set_requires_grad(self.mv_mlp.backbone,  True)
-        self.rgb_mlp.backbone.train()
-        self.mv_mlp.backbone.train()
+        self.rgb_mlp.unfreeze_backbone()
+        self.mv_mlp.unfreeze_backbone()
