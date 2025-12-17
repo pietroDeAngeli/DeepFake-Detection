@@ -4,58 +4,64 @@ from sklearn.model_selection import train_test_split
 
 import tools.tools as tools
 
+
 if __name__ == "__main__":
-    # Original data path
-    data_path = "../../FF++"
 
-    # Dataset path
-    dataset_path = "../../dataset"
+    # ===== PATHS =====
+    dataset_root = "../../dataset"
+    real_dir = os.path.join(dataset_root, "real", "videos")
+    fake_dir = os.path.join(dataset_root, "fake", "videos")
 
-    # JSON file path
-    json_filepath = dataset_path + "/manifest.json"
+    # Output JSON
+    json_filepath = os.path.join(dataset_root, "manifest.json")
+    # =================
 
-    # Get the videos
-    fakes = tools.get_dir_videos(data_path + "/fake")
-    reals = tools.get_dir_videos(data_path + "/real")
+    # Get video paths
+    reals = tools.get_dir_videos(real_dir)
+    fakes = tools.get_dir_videos(fake_dir)
 
-    # Get the names of the videos
+    # Build X (video names) and y (labels)
     X = []
     y = []
-    for p in fakes:
-        X.append(os.path.splitext(os.path.basename(p))[0])
-        y.append(0)
+
     for p in reals:
         X.append(os.path.splitext(os.path.basename(p))[0])
         y.append(1)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=0.2,
+    for p in fakes:
+        X.append(os.path.splitext(os.path.basename(p))[0])
+        y.append(0)
+
+    # First split: train + temp (val + test)
+    X_train, X_temp, y_train, y_temp = train_test_split(
+        X,
+        y,
+        test_size=0.3,          # 70% train, 30% temp
         random_state=42,
         stratify=y
     )
 
+    # Second split: validation + test
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_temp,
+        y_temp,
+        test_size=0.5,          # 15% val, 15% test
+        random_state=42,
+        stratify=y_temp
+    )
+
     train_data = [{"video": n, "label": l} for n, l in zip(X_train, y_train)]
+    val_data   = [{"video": n, "label": l} for n, l in zip(X_val,   y_val)]
     test_data  = [{"video": n, "label": l} for n, l in zip(X_test,  y_test)]
 
     splits = {
         "train": train_data,
+        "val":   val_data,
         "test":  test_data
     }
 
-    # Salva su file JSON
+    # Save JSON
     with open(json_filepath, "w") as f:
         json.dump(splits, f, indent=2)
 
-    print("Saved split to splits.json")
-
-
-
-
-
-
-
-
-
-
-
+    print(f"Saved dataset splits to {json_filepath}")

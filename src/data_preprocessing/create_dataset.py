@@ -1,98 +1,132 @@
 import os
 import json
 import cv2
-os.environ['TF_ENABLE_ONEDNN_OPTS']  = '0'
+from pathlib import Path
+
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
 from tqdm import tqdm
 import torch
 
 import tools.face_detection as faceDetection
 import tools.tools as tools
-import tools.motion_vectors as motionVectos
+import tools.motion_vectors as motionVectors
 import tools.feature_computation as featureComputation
 
 
-if __name__ == "__main__":
+# ================= CONFIG =================
+REAL_DIR = Path("../../dataset/real/videos")
+FAKE_DIR = Path("../../dataset/fake/videos")
+MODEL_PATH = Path("../../models/face_detection_yunet_2023mar.onnx")
+OUT_DIR = Path("../../dataset/preprocessed")
+# =========================================
 
-    fake_dir = "../../FF++_complete/test"
-    real_dir = "../../FF++/real"
-    model_path = "../../models/face_detection_yunet_2023mar.onnx"
-    out_dir = "../../dataset2"
-    
-    #label = True  # Set to True for real videos, False for fake videos
-    label = False
 
-    video_path = ""
-    if label:
-        videos_path = tools.get_dir_videos(real_dir)
-    else:
-        videos_path = tools.get_dir_videos(fake_dir)
+def process_video(video_path, label, detector):
+    """Process a single video and return extracted data or None."""
 
-    # Import the detector
-    detector = faceDetection.initialize_detector(model_path)
+    results = faceDetection.extract_frames_with_faces(
+        detector, video_path, unique_frames=True
+    )
 
-    for video_path in tqdm(videos_path, desc="Processing videos"):
+    if not results:
+        return None
 
-        # Detect faces
-        results = faceDetection.extract_frames_with_faces(detector, video_path, unique_frames=True)
+    frames, faces = zip(*results)
+    frames = list(frames)
+    video_faces = list(faces)
 
-        if results is None or len(results) == 0:
-            print(f"\nWarning: No faces detected in {video_path}. Skipping video.")
-            continue
+    face_boxes = [
+        face.box if face is not None else None
+        for face in video_faces
+    ]
 
-        frames, faces = zip(*results)
-        frames = list(frames)
-        video_faces  = list(faces)
+    mv_results = motionVectors.extract_motion_vectors_and_im(
+        frames, face_boxes
+    )
 
-        # Extract data
-        face_boxes = [ 
-            face.box if face is not None else None
-            for face in video_faces
-        ]
+    mv_results = [r for r in mv_results if r is not None]
+    if not mv_results:
+        return None
 
-        # Motion Vector extraction
-        results = motionVectos.extract_motion_vectors_and_im(
-            frames, face_boxes
-        )
+    mv_x, mv_y, ims = zip(*mv_results)
 
-        # Filter I-frames and None values
-        results = [res for res in results if res is not None]
+    feature_matrix = featureComputation.compute_features_video_tensor(
+        list(mv_x), list(mv_y), list(ims)
+    )
 
-        if not results:
-            print(f"\nWarning: No valid MV frames found after filtering for {video_path}. Skipping.")
-            continue # Salta se non ci sono MV utili
+    return feature_matrix, video_faces, label
 
-        # Extract data
-        mv_x, mv_y, ims = zip(*results)
-        mv_x  = list(mv_x)
-        mv_y  = list(mv_y)
-        ims   = list(ims)
 
-        # Compute the features 
-        feature_matrix = featureComputation.compute_features_video_tensor(
-            mv_x, mv_y, ims
-        )
-        
-        # Create dir for the video
-        video_name = os.path.splitext(os.path.basename(video_path))[0]
-        save_dir = os.path.join(out_dir, video_name)
-        os.makedirs(save_dir, exist_ok=True)
-        
-        # Save the tensor
-        torch.save({"features": feature_matrix}, os.path.join(save_dir, "tensors.pt"))
-        
-        # Save the images
-        faces_dir = os.path.join(save_dir, "faces")
-        os.makedirs(faces_dir, exist_ok=True)
-        for idx, face in enumerate(video_faces):
-            if face is not None:
-                img_path = os.path.join(faces_dir, f"frame_{idx:04d}.jpg")
-                cv2.imwrite(img_path, face.image)
-        
-        # save the data on the video
-        meta = {
-            "video_path": video_path,
-            "label": label,
-            "n_frames": feature_matrix.shape[0]
+def save_video_output(video_path, features, faces, label):
+    video_name = video_path.stem
+    save_dir = OUT_DIR / video_name
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save tensor
+    torch.save(
+        {"features": features},
+        save_dir / "tensors.pt"
+    )
+
+    # Save faces
+    faces_dir = save_dir / "faces"
+    faces_dir.mkdir(exist_ok=True)
+
+    for idx, face in enumerate(faces):
+        if face is not None:
+            img_path = faces_dir / f"frame_{idx:04d}.jpg"
+            cv2.imwrite(str(img_path), face.image)
+
+    # Save metadata
+    meta = {
+        "video_path": str(video_path),
+        "label": label,
+        "n_frames": features.shape[0]
+    }
+
+    with open(save_dir / "meta.json", "w") as f:
+        json.dump(meta, f, indent=2)
+
+
+def main():
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    datasets = {
+        "real": {
+            "path": REAL_DIR,
+            "label": True
+        },
+        "fake": {
+            "path": FAKE_DIR,
+            "label": False
         }
-        with open(os.path.join(save_dir, "meta.json"), "w") as f:
-            json.dump(meta, f, indent=2)
+    }
+
+    detector = faceDetection.initialize_detector(str(MODEL_PATH))
+
+    for split_name, cfg in datasets.items():
+        videos = tools.get_dir_videos(cfg["path"])
+        label = cfg["label"]
+
+        print(f"\n▶ Processing {split_name.upper()} videos ({len(videos)})")
+
+        for video_path in tqdm(videos, desc=f"{split_name}"):
+
+            video_path = Path(video_path)
+
+            result = process_video(video_path, label, detector)
+
+            if result is None:
+                print(f"\nSkipping {video_path.name} (no valid data)")
+                continue
+
+            features, faces, label = result
+            save_video_output(video_path, features, faces, label)
+
+    print("\n Preprocessing completed for REAL and FAKE datasets")
+
+
+if __name__ == "__main__":
+    main()
