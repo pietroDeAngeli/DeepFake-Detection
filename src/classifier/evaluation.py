@@ -105,7 +105,7 @@ def evaluate(model, dataloader, device, out_dir="eval_results"):
 
 
 if __name__ == "__main__":
-    dataset_path  = "../../../dataset"
+    dataset_path = "../../dataset/preprocessed"
     manifest_path = os.path.join(dataset_path, "manifest.json")
     checkpoint    = "best_model.pth"
 

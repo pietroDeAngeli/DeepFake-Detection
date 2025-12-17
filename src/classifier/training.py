@@ -132,7 +132,7 @@ def train_one_epoch(model, loader, device, criterion, optimizer, desc="Train"):
 
 if __name__ == "__main__":
 
-    dataset_path  = "../../../dataset"
+    dataset_path  = "../../dataset/preprocessed"
     manifest_path = os.path.join(dataset_path, "manifest.json")
 
     with open(manifest_path, "r") as f:

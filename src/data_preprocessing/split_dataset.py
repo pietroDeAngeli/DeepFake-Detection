@@ -8,7 +8,7 @@ import tools.tools as tools
 if __name__ == "__main__":
 
     # ===== PATHS =====
-    dataset_root = "../../dataset"
+    dataset_root = "../../dataset/preprocessed"
     real_dir = os.path.join(dataset_root, "real", "videos")
     fake_dir = os.path.join(dataset_root, "fake", "videos")
 

@@ -22,40 +22,12 @@ OUT_DIR = Path("../../dataset/preprocessed")
 # =========================================
 
 
-def process_video(video_path, label, detector):
+def process_video(video_path, detector):
     """Process a single video and return extracted data or None."""
 
-    results = faceDetection.extract_frames_with_faces(
-        detector, video_path, unique_frames=True
-    )
+    feature_matrix, video_faces = tools.feature_computation(detector, video_path)
 
-    if not results:
-        return None
-
-    frames, faces = zip(*results)
-    frames = list(frames)
-    video_faces = list(faces)
-
-    face_boxes = [
-        face.box if face is not None else None
-        for face in video_faces
-    ]
-
-    mv_results = motionVectors.extract_motion_vectors_and_im(
-        frames, face_boxes
-    )
-
-    mv_results = [r for r in mv_results if r is not None]
-    if not mv_results:
-        return None
-
-    mv_x, mv_y, ims = zip(*mv_results)
-
-    feature_matrix = featureComputation.compute_features_video_tensor(
-        list(mv_x), list(mv_y), list(ims)
-    )
-
-    return feature_matrix, video_faces, label
+    return feature_matrix, video_faces
 
 
 def save_video_output(video_path, features, faces, label):
@@ -90,7 +62,7 @@ def save_video_output(video_path, features, faces, label):
 
 
 def main():
-
+    
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     datasets = {
@@ -110,19 +82,23 @@ def main():
         videos = tools.get_dir_videos(cfg["path"])
         label = cfg["label"]
 
-        print(f"\n▶ Processing {split_name.upper()} videos ({len(videos)})")
+        print(f"\nProcessing {split_name.upper()} videos ({len(videos)})")
 
         for video_path in tqdm(videos, desc=f"{split_name}"):
+            # Skip if already processed
+            save_dir = OUT_DIR / video_path.stem
+            if save_dir.exists():
+                continue
 
             video_path = Path(video_path)
 
-            result = process_video(video_path, label, detector)
+            result = process_video(video_path, detector)
 
             if result is None:
                 print(f"\nSkipping {video_path.name} (no valid data)")
                 continue
 
-            features, faces, label = result
+            features, faces = result
             save_video_output(video_path, features, faces, label)
 
     print("\n Preprocessing completed for REAL and FAKE datasets")

@@ -37,6 +37,56 @@ def get_dir_videos(path):
             videos.append(os.path.join(path, file))
     return videos
 
+def feature_computation(detector, video_path):
+    """Process a single video and return extracted data or None."""
+
+    # 1. Extract frames + faces
+    results = faceDetection.extract_frames_with_faces(
+        detector, video_path, unique_frames=True
+    )
+
+    if results is None or len(results) == 0:
+        return None
+
+    frames_all, faces_all = zip(*results)
+    frames_all = list(frames_all)
+    faces_all  = list(faces_all)
+
+    # 2. Face boxes
+    face_boxes = [
+        face.box if face is not None else None
+        for face in faces_all
+    ]
+
+    # 3. Motion Vector extraction (same order as frames_all)
+    mv_results_all = motionVectors.extract_motion_vectors_and_im(
+        frames_all, face_boxes
+    )
+
+    # 4. Keep ONLY aligned (frame, face, MV) triples
+    valid_faces = []
+    valid_mvs   = []
+
+    for face, mv in zip(faces_all, mv_results_all):
+        if mv is None:
+            continue
+        valid_faces.append(face)
+        valid_mvs.append(mv)
+
+    if not valid_mvs:
+        return None
+
+    # 5. Unpack motion vectors
+    mv_x, mv_y, ims = zip(*valid_mvs)
+
+    # 6. Feature computation
+    feature_matrix = featureComputation.compute_features_video_tensor(
+        list(mv_x), list(mv_y), list(ims)
+    )
+
+    return feature_matrix, valid_faces
+
+
 def pipeline(models_dir = "../../models", temp_dir = "../../temp", video_path = None) -> Result:
 
     total_start_time = time.time()
