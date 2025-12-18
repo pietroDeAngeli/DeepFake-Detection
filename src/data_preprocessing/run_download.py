@@ -15,10 +15,10 @@ FAKE_NAME = "fake"
 
 
 def run(cmd):
-    print(f"\n▶ Running: {' '.join(cmd)}")
+    print(f"\nRunning: {' '.join(cmd)}")
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        print("❌ Command failed")
+        print("Command failed")
         sys.exit(result.returncode)
 
 
@@ -42,7 +42,8 @@ def main():
         str(OUT_PATH),
         "-d", "original",
         "-c", COMPRESSION,
-        "-t", TYPE
+        "-t", TYPE,
+        "--server", "EU2"
     ])
 
     # 3. Download DEEPFAKES (fake)
@@ -51,7 +52,8 @@ def main():
         str(OUT_PATH),
         "-d", "Deepfakes",
         "-c", COMPRESSION,
-        "-t", TYPE
+        "-t", TYPE,
+        "--server", "EU2"
     ])
 
     # 4. Restructure directories
