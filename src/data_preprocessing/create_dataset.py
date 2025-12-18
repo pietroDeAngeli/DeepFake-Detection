@@ -10,8 +10,6 @@ import torch
 
 import tools.face_detection as faceDetection
 import tools.tools as tools
-import tools.motion_vectors as motionVectors
-import tools.feature_computation as featureComputation
 
 
 # ================= CONFIG =================
@@ -25,8 +23,11 @@ OUT_DIR = Path("../../dataset/preprocessed")
 def process_video(video_path, detector):
     """Process a single video and return extracted data or None."""
 
-    feature_matrix, video_faces = tools.feature_computation(detector, video_path)
+    result = tools.feature_computation(detector, video_path)
+    if result is None:
+        return None
 
+    feature_matrix, video_faces = result
     return feature_matrix, video_faces
 
 
@@ -62,7 +63,7 @@ def save_video_output(video_path, features, faces, label):
 
 
 def main():
-    
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     datasets = {
@@ -84,24 +85,26 @@ def main():
 
         print(f"\nProcessing {split_name.upper()} videos ({len(videos)})")
 
-        for video_path in tqdm(videos, desc=f"{split_name}"):
+        for video_path in tqdm(videos, desc=split_name):
+
+            # video_path è una stringa → converti subito
+            video_path = Path(video_path)
+
             # Skip if already processed
             save_dir = OUT_DIR / video_path.stem
             if save_dir.exists():
                 continue
 
-            video_path = Path(video_path)
-
             result = process_video(video_path, detector)
 
             if result is None:
-                print(f"\nSkipping {video_path.name} (no valid data)")
+                print(f"Skipping {video_path.name} (no valid data)")
                 continue
 
             features, faces = result
             save_video_output(video_path, features, faces, label)
 
-    print("\n Preprocessing completed for REAL and FAKE datasets")
+    print("Preprocessing completed for REAL and FAKE datasets")
 
 
 if __name__ == "__main__":

@@ -260,5 +260,5 @@ if __name__ == "__main__":
     args = parse_args()
     main(args)
 
-#python download.py ../../dataset -d original -c c23 -t videos
-#python download.py ../../dataset -d Deepfakes -c c23 -t videos
+#python download.py ../../dataset -d original -c c23 -t videos --server EU2
+#python download.py ../../dataset -d Deepfakes -c c23 -t videos --server EU2
