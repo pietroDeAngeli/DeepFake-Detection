@@ -1,67 +1,96 @@
-import os
 import json
+from pathlib import Path
 from sklearn.model_selection import train_test_split
 
-import tools.tools as tools
+
+SEED = 42
+TRAIN_FRAC = 0.70
+VAL_FRAC = 0.15
+TEST_FRAC = 0.15
 
 
-if __name__ == "__main__":
+def project_root() -> Path:
+    # file: .../src/data_preprocessing/split_dataset.py
+    return Path(__file__).resolve().parents[2]
 
-    # ===== PATHS =====
-    dataset_root = "../../dataset/preprocessed"
-    real_dir = os.path.join(dataset_root, "real", "videos")
-    fake_dir = os.path.join(dataset_root, "fake", "videos")
 
-    # Output JSON
-    json_filepath = os.path.join(dataset_root, "manifest.json")
-    # =================
+def list_preprocessed_video_ids(class_dir: Path, class_name: str) -> list[str]:
+    """
+    Returns relative ids like: "real/<video_name>" or "fake/<video_name>"
+    Only keeps dirs containing tensors.pt
+    """
+    if not class_dir.exists():
+        return []
 
-    # Get video paths
-    reals = tools.get_dir_videos(real_dir)
-    fakes = tools.get_dir_videos(fake_dir)
+    ids = []
+    for d in class_dir.iterdir():
+        if not d.is_dir():
+            continue
+        if (d / "tensors.pt").is_file():
+            ids.append(f"{class_name}/{d.name}")
+    return sorted(ids)
 
-    # Build X (video names) and y (labels)
-    X = []
-    y = []
 
-    for p in reals:
-        X.append(os.path.splitext(os.path.basename(p))[0])
-        y.append(1)
+def main():
+    root = project_root()
+    preprocessed_root = root / "dataset" / "preprocessed"
 
-    for p in fakes:
-        X.append(os.path.splitext(os.path.basename(p))[0])
-        y.append(0)
+    real_dir = preprocessed_root / "real"
+    fake_dir = preprocessed_root / "fake"
 
-    # First split: train + temp (val + test)
+    manifest_path = preprocessed_root / "manifest.json"
+
+    # Collect preprocessed samples
+    real_ids = list_preprocessed_video_ids(real_dir, "real")
+    fake_ids = list_preprocessed_video_ids(fake_dir, "fake")
+
+    if len(real_ids) == 0 and len(fake_ids) == 0:
+        raise RuntimeError(
+            f"No preprocessed samples found in {preprocessed_root}. "
+            f"Expected structure: dataset/preprocessed/real/<video>/tensors.pt and fake/<video>/tensors.pt"
+        )
+
+    X = real_ids + fake_ids
+    y = [1] * len(real_ids) + [0] * len(fake_ids)
+
+    # Sanity on fractions
+    if abs((TRAIN_FRAC + VAL_FRAC + TEST_FRAC) - 1.0) > 1e-6:
+        raise ValueError("TRAIN_FRAC + VAL_FRAC + TEST_FRAC must sum to 1.0")
+
+    # Split: train + temp
+    temp_frac = 1.0 - TRAIN_FRAC
     X_train, X_temp, y_train, y_temp = train_test_split(
-        X,
-        y,
-        test_size=0.3,          # 70% train, 30% temp
-        random_state=42,
+        X, y,
+        test_size=temp_frac,
+        random_state=SEED,
         stratify=y
     )
 
-    # Second split: validation + test
+    # Split: val + test from temp
+    # val_frac_of_temp = VAL_FRAC / (VAL_FRAC + TEST_FRAC)
+    val_frac_of_temp = VAL_FRAC / (VAL_FRAC + TEST_FRAC)
+
     X_val, X_test, y_val, y_test = train_test_split(
-        X_temp,
-        y_temp,
-        test_size=0.5,          # 15% val, 15% test
-        random_state=42,
+        X_temp, y_temp,
+        test_size=(1.0 - val_frac_of_temp),
+        random_state=SEED,
         stratify=y_temp
     )
 
-    train_data = [{"video": n, "label": l} for n, l in zip(X_train, y_train)]
-    val_data   = [{"video": n, "label": l} for n, l in zip(X_val,   y_val)]
-    test_data  = [{"video": n, "label": l} for n, l in zip(X_test,  y_test)]
-
     splits = {
-        "train": train_data,
-        "val":   val_data,
-        "test":  test_data
+        "train": [{"video": v, "label": int(l)} for v, l in zip(X_train, y_train)],
+        "val":   [{"video": v, "label": int(l)} for v, l in zip(X_val, y_val)],
+        "test":  [{"video": v, "label": int(l)} for v, l in zip(X_test, y_test)],
     }
 
-    # Save JSON
-    with open(json_filepath, "w") as f:
+    preprocessed_root.mkdir(parents=True, exist_ok=True)
+    with open(manifest_path, "w") as f:
         json.dump(splits, f, indent=2)
 
-    print(f"Saved dataset splits to {json_filepath}")
+    print(f"Saved manifest to: {manifest_path}")
+    print(f"Counts: real={len(real_ids)} fake={len(fake_ids)} | "
+          f"train={len(splits['train'])} val={len(splits['val'])} test={len(splits['test'])}")
+
+
+if __name__ == "__main__":
+    main()

@@ -13,7 +13,6 @@ temp/
 **/__pycache__
 **/deepfake_tools.egg-info
 **/dataset
-**/Fine_tuning
 
 
 
