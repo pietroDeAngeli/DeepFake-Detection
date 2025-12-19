@@ -172,7 +172,7 @@ if __name__ == "__main__":
     lr_head_phase1 = 1e-3
     lr_all_phase2  = 1e-4
     num_workers = 0
-    batch_size = 1
+    batch_size = 8
 
     out_dir = "run_single_split_ft"
     os.makedirs(out_dir, exist_ok=True)
