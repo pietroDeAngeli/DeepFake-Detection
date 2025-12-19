@@ -19,14 +19,14 @@ import classifier.network as nw
 SEED = 42
 
 EPOCHS = 50
-WARMUP_EPOCHS = 5
+WARMUP_EPOCHS = 50
 LR_HEAD_PHASE1 = 1e-3
 LR_ALL_PHASE2 = 1e-4
 
 EARLY_PATIENCE = 5
 EARLY_MIN_DELTA = 1e-4
 
-BATCH_SIZE = 1          # 1 video per batch (lunghezze variabili)
+BATCH_SIZE = 8          # 1 video per batch (lunghezze variabili)
 NUM_WORKERS = 0
 
 AUGMENT_TRAIN = True
