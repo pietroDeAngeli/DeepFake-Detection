@@ -19,11 +19,15 @@ While optical flow is more precise, it is also computationally expensive. Motion
 ---
 
 ## Dataset
-We use a subset of **400 videos** from the [FaceForensics++ dataset](https://www.kaggle.com/datasets/hungle3401/faceforensics?resource=download).  
+I used [FaceForensics++ dataset](https://www.kaggle.com/datasets/hungle3401/faceforensics?resource=download).  
 
-The dataset is split into `real/` and `fake/` directories (200 videos each). Each video is processed to extract both:
+The dataset is split into `real/` and `fake/` directories. Each video is processed to extract both:
 - **Cropped face frames** (via YuNet detector, resized to 224x224).
 - **Motion vectors (MVs) and Information Masks (IMs)** from H.264 streams.
+- **Splits** 70% training, 15% validation, 15% test.
+
+## Goal
+The Goal is to reproduce the results of the paper but using a lighter model for inference. 
 
 ---
 
@@ -59,9 +63,7 @@ The dataset is split into `real/` and `fake/` directories (200 videos each). Eac
 ---
 
 ## Results
-The resulting models achieves 64% accuracy, compared to 71% of the paper but using a dataset which is 20% of the original one. 
-
-As found in the paper the bottleneck is the face extraction procedure, even using a lighter solution (YuNet) es extractor. 
+The resulting models achieves the same accuracy of the paper. It means I've been able to implement the paper even without technical details on the implementation but using a lighter inference because I replaced MTCNN with YuNet for the face extraction which is the bottleneck of the paper. 
 
 For more details on the project check the [documentation file](https://github.com/pietroDeAngeli/DeepFake-Detection/blob/main/DeepFake_detection___documentation.pdf) or feel free to send me an email.  
 
@@ -74,3 +76,21 @@ For more details on the project check the [documentation file](https://github.co
 - PyAV  
 - Albumentations  
 - Matplotlib, Seaborn, Pandas
+
+## Installation
+```
+conda create --name df python=3.10
+conda activate df
+pip install torch torchvision
+pip install -e .
+```
+
+## References
+```
+@article{gronquist2023efficient,
+  title={Efficient Temporally-Aware DeepFake Detection using H. 264 Motion Vectors},
+  author={Gr{\"o}nquist, Peter and Ren, Yufan and He, Qingyi and Verardo, Alessio and S{\"u}sstrunk, Sabine},
+  journal={arXiv preprint arXiv:2311.10788},
+  year={2023}
+}
+```
