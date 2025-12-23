@@ -87,7 +87,6 @@ def main():
 
         for video_path in tqdm(videos, desc=split_name):
 
-            # video_path è una stringa → converti subito
             video_path = Path(video_path)
 
             # Skip if already processed

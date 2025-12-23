@@ -68,9 +68,9 @@ def main():
     move_all(src_real, dst_real)
     move_all(src_fake, dst_fake)
 
-    print("\n✅ FaceForensics++ download + restructure completed")
-    print(f"📁 Real videos → {dst_real}")
-    print(f"📁 Fake videos → {dst_fake}")
+    print("\nFaceForensics++ download + restructure completed")
+    print(f"Real videos → {dst_real}")
+    print(f"Fake videos → {dst_fake}")
 
 
 if __name__ == "__main__":
