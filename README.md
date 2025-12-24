@@ -82,6 +82,8 @@ For more details on the project check the [documentation file](https://github.co
 conda create --name df python=3.10
 conda activate df
 pip install torch torchvision
+git clone https://github.com/pietroDeAngeli/DeepFake-Detection
+cd DeepFake-Detection
 pip install -e .
 ```
 
